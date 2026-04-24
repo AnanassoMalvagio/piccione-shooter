@@ -2,23 +2,43 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Piccione Shooter</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #1a1a2e; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Courier New', monospace; }
-  h1 { color: #e0e0e0; font-size: 1.4em; margin-bottom: 8px; letter-spacing: 2px; }
-  #hud { color: #fff; display: flex; gap: 40px; margin-bottom: 8px; font-size: 1em; }
-  #canvasWrap { position: relative; display: inline-block; }
-  canvas { border: 3px solid #444; border-radius: 4px; display: block; }
-  #muteBtn {
-    position: absolute; top: 8px; right: 8px;
-    background: rgba(0,0,0,0.55); border: 1px solid #666;
-    border-radius: 5px; color: #fff; font-size: 17px;
-    cursor: pointer; padding: 3px 8px; z-index: 10; line-height: 1;
-    transition: background 0.15s;
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    background: #1a1a2e;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: 'Courier New', monospace;
+    touch-action: none; user-select: none; -webkit-user-select: none;
   }
-  #muteBtn:hover { background: rgba(0,0,0,0.82); }
-  #info { color: #aaa; font-size: 0.8em; margin-top: 8px; }
+  h1 {
+    color: #e0e0e0; letter-spacing: 2px; text-align: center;
+    font-size: clamp(0.7em, 3.5vw, 1.4em);
+    margin-bottom: clamp(2px, 0.8vw, 8px);
+  }
+  #hud {
+    color: #fff; display: flex; flex-wrap: wrap; justify-content: center;
+    gap: clamp(6px, 2.5vw, 40px);
+    font-size: clamp(0.58em, 2.6vw, 1em);
+    margin-bottom: clamp(2px, 0.8vw, 8px);
+  }
+  #canvasWrap { position: relative; display: inline-block; line-height: 0; }
+  canvas { display: block; border: 2px solid #444; border-radius: 4px; }
+  #muteBtn {
+    position: absolute; top: 6px; right: 6px;
+    background: rgba(0,0,0,0.55); border: 1px solid #666;
+    border-radius: 5px; color: #fff; font-size: clamp(13px, 3vw, 17px);
+    cursor: pointer; padding: 3px 7px; z-index: 10; line-height: 1;
+    touch-action: manipulation;
+  }
+  #muteBtn:hover, #muteBtn:active { background: rgba(0,0,0,0.82); }
+  #info {
+    color: #aaa; text-align: center; padding: 0 6px;
+    font-size: clamp(0.48em, 1.6vw, 0.75em);
+    margin-top: clamp(2px, 0.6vw, 6px);
+  }
 </style>
 </head>
 <body>
@@ -33,11 +53,11 @@
   <canvas id="c" width="800" height="500"></canvas>
   <button id="muteBtn" onclick="toggleMute()">🔊</button>
 </div>
-<div id="info">← → ↑ ↓ per muoverti | SPAZIO per sparare | P per pausa</div>
+<div id="info">PC: ← → ↑ ↓ | SPAZIO spara | P pausa &nbsp;·&nbsp; Mobile: joystick + SPARA</div>
 
 <script>
 const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+const ctx    = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 
 let score = 0, lives = 3, level = 1, paused = false, gameOver = false, intro = true;
@@ -47,43 +67,28 @@ const GROUND_Y = H - 100;
 const ROAD_Y   = H - 95;
 
 const player = {
-  x: W / 2, y: 80, w: 54, h: 40,
-  speed: 5, wing: 0, wingDir: 1, frame: 0,
-  invincibleTimer: 0
+  x: W/2, y: 80, w: 54, h: 40,
+  speed: 5, wing: 0, wingDir: 1, frame: 0, invincibleTimer: 0
 };
 
-let guanos = [];
+let guanos = [], shootCooldown = 0;
 const GUANO_SPEED = 9;
-let shootCooldown = 0;
-
 let cars = [];
 const CAR_COLORS = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#34495e'];
-
 let particles = [];
-
 let clouds = [
-  {x:100,y:30,w:120,s:0.3},
-  {x:350,y:55,w:90,s:0.2},
-  {x:600,y:25,w:150,s:0.35},
-  {x:750,y:60,w:80,s:0.25},
+  {x:100,y:30,w:120,s:0.3},{x:350,y:55,w:90,s:0.2},
+  {x:600,y:25,w:150,s:0.35},{x:750,y:60,w:80,s:0.25},
 ];
-
-const trees = [
-  {x:50,h:80},{x:130,h:65},{x:700,h:75},{x:760,h:90},{x:720,h:60}
-];
-
+const trees = [{x:50,h:80},{x:130,h:65},{x:700,h:75},{x:760,h:90},{x:720,h:60}];
 let popups = [];
 
-// --- Guardiani (array, supporta 2 dal livello 6) ---
-let guardians = [];
-let guardianSpawnTimer = 300;
-let waterDrops = [];
-
-// --- Animazione livello ---
-let levelUpAnim = null; // { level, timer, maxTimer }
+// --- Guardiani ---
+let guardians = [], guardianSpawnTimer = 300, waterDrops = [];
+let levelUpAnim = null;
 
 // --- Audio ---
-const bgMusic       = new Audio('park%20theme.mp3');
+const bgMusic = new Audio('park%20theme.mp3');
 const guardianMusic = new Audio('guardian%20theme.mp3');
 bgMusic.loop = true;       bgMusic.volume = 0.6;
 guardianMusic.loop = true; guardianMusic.volume = 0.7;
@@ -92,356 +97,311 @@ let muted = false, audioStarted = false, currentTrack = 'park';
 function startAudio() {
   if (audioStarted) return;
   audioStarted = true;
-  if (!muted) bgMusic.play().catch(() => {});
+  if (!muted) bgMusic.play().catch(()=>{});
 }
-
 function updateMusic() {
   if (!audioStarted) return;
   const want = guardians.length > 0 ? 'guardian' : 'park';
   if (want === currentTrack) return;
   currentTrack = want;
-  if (want === 'guardian') {
-    bgMusic.pause();
-    guardianMusic.currentTime = 0;
-    if (!muted) guardianMusic.play().catch(() => {});
-  } else {
-    guardianMusic.pause();
-    if (!muted) bgMusic.play().catch(() => {});
-  }
+  if (want === 'guardian') { bgMusic.pause(); guardianMusic.currentTime=0; if(!muted) guardianMusic.play().catch(()=>{}); }
+  else                     { guardianMusic.pause(); if(!muted) bgMusic.play().catch(()=>{}); }
 }
-
 function toggleMute() {
-  muted = !muted;
-  bgMusic.muted = muted; guardianMusic.muted = muted;
+  muted = !muted; bgMusic.muted=muted; guardianMusic.muted=muted;
   document.getElementById('muteBtn').textContent = muted ? '🔇' : '🔊';
 }
 
+// ---- Canvas scaling ----
+let canvasScale = 1;
+function resizeCanvas() {
+  const h1   = document.querySelector('h1');
+  const hud  = document.getElementById('hud');
+  const info = document.getElementById('info');
+  const usedH = (h1.offsetHeight||26) + (hud.offsetHeight||24) + (info.offsetHeight||18) + 24;
+  canvasScale = Math.min(window.innerWidth / W, (window.innerHeight - usedH) / H);
+  canvas.style.width  = Math.round(W * canvasScale) + 'px';
+  canvas.style.height = Math.round(H * canvasScale) + 'px';
+}
+window.addEventListener('resize', resizeCanvas);
+
+function toGamePos(clientX, clientY) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (clientX - r.left) * (W / r.width), y: (clientY - r.top) * (H / r.height) };
+}
+
+// ---- Controlli touch ----
+const JOY_CX = 95, JOY_CY = H - 78; // y=422
+const JOY_R = 72, JOY_KNOB_R = 30;
+const FIRE_CX = W - 95, FIRE_CY = H - 78;
+const FIRE_R = 62;
+
+let joyTouchId = null, joyKnobX = 0, joyKnobY = 0, joyDx = 0, joyDy = 0;
+let fireTouchId = null;
+
+function resetJoystick() { joyTouchId=null; joyKnobX=0; joyKnobY=0; joyDx=0; joyDy=0; }
+
+function updateJoystick(pos) {
+  let dx = pos.x - JOY_CX, dy = pos.y - JOY_CY;
+  const dist = Math.hypot(dx, dy);
+  const maxD = JOY_R - JOY_KNOB_R;
+  if (dist > maxD) { dx=dx/dist*maxD; dy=dy/dist*maxD; }
+  joyKnobX=dx; joyKnobY=dy; joyDx=dx/maxD; joyDy=dy/maxD;
+}
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (intro)    { startGame(); return; }
+  if (gameOver) { reset(); return; }
+  if (paused)   { paused=false; return; }
+  for (const t of e.changedTouches) {
+    const pos = toGamePos(t.clientX, t.clientY);
+    if (joyTouchId===null && Math.hypot(pos.x-JOY_CX, pos.y-JOY_CY) < JOY_R+30) {
+      joyTouchId=t.identifier; updateJoystick(pos);
+    } else if (fireTouchId===null && Math.hypot(pos.x-FIRE_CX, pos.y-FIRE_CY) < FIRE_R+30) {
+      fireTouchId=t.identifier; shoot();
+    }
+  }
+}, {passive:false});
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier===joyTouchId) updateJoystick(toGamePos(t.clientX, t.clientY));
+  }
+}, {passive:false});
+
+function onTouchEnd(e) {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier===joyTouchId) resetJoystick();
+    if (t.identifier===fireTouchId) fireTouchId=null;
+  }
+}
+canvas.addEventListener('touchend',   onTouchEnd, {passive:false});
+canvas.addEventListener('touchcancel',onTouchEnd, {passive:false});
+
 // ---- Difficoltà ----
-
 function carBaseSpeed() {
-  // +15% per livello rispetto al livello precedente
-  const base = 1.0 + Math.random() * 1.5;
-  return Math.min(base * Math.pow(1.15, level - 1), 9);
+  return Math.min((1.0+Math.random()*1.5)*Math.pow(1.15,level-1), 9);
 }
-
-function getMaxGuardians() { return level >= 6 ? 2 : 1; }
-
+function getMaxGuardians()    { return level>=6 ? 2 : 1; }
 function getGuardianSpawnInterval() {
-  // Livello 1-2: raro, 3-4: medio, 5+: frequente
-  if (level <= 2) return 460 + Math.floor(Math.random() * 80);
-  if (level <= 4) return 260 + Math.floor(Math.random() * 60);
-  if (level <= 7) return 140 + Math.floor(Math.random() * 50);
-  return Math.max(80, 110 - level * 3) + Math.floor(Math.random() * 30);
+  if (level<=2) return 460+Math.floor(Math.random()*80);
+  if (level<=4) return 260+Math.floor(Math.random()*60);
+  if (level<=7) return 140+Math.floor(Math.random()*50);
+  return Math.max(80,110-level*3)+Math.floor(Math.random()*30);
 }
-
 function getPumpInterval() {
-  // Livello 1-2: lento, 3-4: medio (non-burst), 5+: burst mode
-  if (level <= 2) return Math.max(85, 105 - level * 10);
-  if (level <= 4) return Math.max(42, 75 - level * 8);
-  return 0; // burst mode gestito separatamente
+  if (level<=2) return Math.max(85,105-level*10);
+  if (level<=4) return Math.max(42,75-level*8);
+  return 0;
 }
-
 function getBurstParams() {
-  const shots = 3 + Math.min(level - 5, 4);          // 3-7 colpi
-  const shotInterval = Math.max(7, 14 - level);        // frame tra colpi
-  const burstPause = Math.max(30, 68 - level * 5);     // frame tra raffiche
-  return { shots, shotInterval, burstPause };
-}
-
-// ---- Guardiani ----
-
-function makeGuardian(leftSide) {
-  const gx = leftSide ? 70 + Math.random() * 90 : W - 160 + Math.random() * 90;
-  const burst = level >= 5;
-  const bp = burst ? getBurstParams() : null;
   return {
-    x: gx, y: GROUND_Y,
-    state: 'idle', timer: 0, pumpTimer: 0,
-    pumpInterval: getPumpInterval(),
-    duration: 200 + Math.random() * 80,
-    fleeDir: leftSide ? -1 : 1,
-    burst,
-    burstActive: false,
-    burstShotsLeft: 0,
-    burstDelay: 0,
-    burstParams: bp,
+    shots: 3+Math.min(level-5,4),
+    shotInterval: Math.max(7,14-level),
+    burstPause: Math.max(30,68-level*5),
   };
 }
 
-function spawnGuardian() {
-  // Scegli lato evitando duplicati
-  const leftOccupied = guardians.some(g => g.x < W/2 && g.state !== 'fleeing');
-  const leftSide = leftOccupied ? false : (Math.random() < 0.5);
-  const g = makeGuardian(leftSide);
-  guardians.push(g);
-  playGuardianSound();
-  updateMusic();
+// ---- Guardiani ----
+function makeGuardian(leftSide) {
+  const gx = leftSide ? 70+Math.random()*90 : W-160+Math.random()*90;
+  const burst = level>=5;
+  return {
+    x:gx, y:GROUND_Y, state:'idle', timer:0, pumpTimer:0,
+    pumpInterval:getPumpInterval(), duration:200+Math.random()*80,
+    fleeDir:leftSide?-1:1, burst, burstActive:false, burstShotsLeft:0,
+    burstDelay:0, burstParams:burst?getBurstParams():null,
+  };
 }
-
+function spawnGuardian() {
+  const leftOccupied = guardians.some(g=>g.x<W/2&&g.state!=='fleeing');
+  const leftSide = leftOccupied ? false : (Math.random()<0.5);
+  guardians.push(makeGuardian(leftSide));
+  playGuardianSound(); updateMusic();
+}
 function playGuardianSound() {
   try {
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ac.createOscillator(), gain = ac.createGain();
-    osc.connect(gain); gain.connect(ac.destination);
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(880, ac.currentTime);
-    osc.frequency.setValueAtTime(660, ac.currentTime + 0.12);
-    osc.frequency.setValueAtTime(880, ac.currentTime + 0.24);
-    gain.gain.setValueAtTime(0.12, ac.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.42);
-    osc.start(); osc.stop(ac.currentTime + 0.42);
-  } catch(e) {}
+    const ac=new(window.AudioContext||window.webkitAudioContext)();
+    const osc=ac.createOscillator(), gain=ac.createGain();
+    osc.connect(gain); gain.connect(ac.destination); osc.type='square';
+    osc.frequency.setValueAtTime(880,ac.currentTime);
+    osc.frequency.setValueAtTime(660,ac.currentTime+0.12);
+    osc.frequency.setValueAtTime(880,ac.currentTime+0.24);
+    gain.gain.setValueAtTime(0.12,ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.42);
+    osc.start(); osc.stop(ac.currentTime+0.42);
+  } catch(e){}
 }
-
 function updateGuardianPump(g) {
-  if (g.state !== 'pumping') return;
+  if (g.state!=='pumping') return;
   if (g.burst) {
     if (g.burstActive) {
-      g.burstDelay++;
-      if (g.burstDelay >= g.burstParams.shotInterval) {
-        g.burstDelay = 0;
-        fireWaterJet(g.x, g.y);
-        g.burstShotsLeft--;
-        if (g.burstShotsLeft <= 0) { g.burstActive = false; g.pumpTimer = 0; }
+      if (++g.burstDelay>=g.burstParams.shotInterval) {
+        g.burstDelay=0; fireWaterJet(g.x,g.y); g.burstShotsLeft--;
+        if (g.burstShotsLeft<=0) { g.burstActive=false; g.pumpTimer=0; }
       }
     } else {
-      g.pumpTimer++;
-      if (g.pumpTimer >= g.burstParams.burstPause) {
-        g.pumpTimer = 0;
-        g.burstActive = true;
-        g.burstShotsLeft = g.burstParams.shots;
-        g.burstDelay = 0;
+      if (++g.pumpTimer>=g.burstParams.burstPause) {
+        g.pumpTimer=0; g.burstActive=true;
+        g.burstShotsLeft=g.burstParams.shots; g.burstDelay=0;
       }
     }
   } else {
-    g.pumpTimer++;
-    if (g.pumpTimer % g.pumpInterval === 0) fireWaterJet(g.x, g.y);
+    if (++g.pumpTimer%g.pumpInterval===0) fireWaterJet(g.x,g.y);
   }
 }
-
-function fireWaterJet(gx, gy) {
-  for (let i = 0; i < 4; i++) {
-    waterDrops.push({
-      x: gx + (Math.random() - 0.5) * 10,
-      y: gy - 48,
-      vx: (Math.random() - 0.5) * 1.4,
-      vy: -(12 + Math.random() * 4),
-      r: 4 + Math.random() * 2,
-      life: 1,
-    });
+function fireWaterJet(gx,gy) {
+  for (let i=0;i<4;i++) {
+    waterDrops.push({ x:gx+(Math.random()-0.5)*10, y:gy-48,
+      vx:(Math.random()-0.5)*1.4, vy:-(12+Math.random()*4), r:4+Math.random()*2, life:1 });
   }
 }
 
 // ---- Macchine ----
-
 function spawnCars() {
-  cars = [];
-  const count = 4 + level;
-  const spacing = (W - 100) / count;
-  const wildChance = level >= 5 ? Math.min(0.8, (level - 4) * 0.2) : 0;
-  for (let i = 0; i < count; i++) {
-    const speed = carBaseSpeed();
-    const dir = Math.random() < 0.5 ? 1 : -1;
-    const isWild = Math.random() < wildChance;
-    cars.push({
-      x: 50 + i * spacing + Math.random() * 20,
-      y: ROAD_Y, w: 70 + Math.random() * 20, h: 36,
-      color: CAR_COLORS[i % CAR_COLORS.length],
-      vx: speed * dir,
-      hit: false, hitTimer: 0, shake: 0,
-      hp: 1 + Math.floor(level / 3),
-      wild: isWild,
-      wildTimer: 60 + Math.random() * 90,
-    });
+  cars=[];
+  const count=4+level, spacing=(W-100)/count;
+  const wildChance=level>=5?Math.min(0.8,(level-4)*0.2):0;
+  for (let i=0;i<count;i++) {
+    const speed=carBaseSpeed(), dir=Math.random()<0.5?1:-1, isWild=Math.random()<wildChance;
+    cars.push({ x:50+i*spacing+Math.random()*20, y:ROAD_Y, w:70+Math.random()*20, h:36,
+      color:CAR_COLORS[i%CAR_COLORS.length], vx:speed*dir,
+      hit:false, hitTimer:0, shake:0, hp:1+Math.floor(level/3), wild:isWild, wildTimer:60+Math.random()*90 });
   }
 }
-
-function spawnParticles(x, y, color) {
-  for (let i = 0; i < 18; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const spd = 1.5 + Math.random() * 3;
-    particles.push({
-      x, y, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd - 1,
-      life: 1, decay: 0.04 + Math.random()*0.04, r: 3 + Math.random()*4, color
-    });
+function spawnParticles(x,y,color) {
+  for (let i=0;i<18;i++) {
+    const a=Math.random()*Math.PI*2, s=1.5+Math.random()*3;
+    particles.push({ x,y, vx:Math.cos(a)*s, vy:Math.sin(a)*s-1,
+      life:1, decay:0.04+Math.random()*0.04, r:3+Math.random()*4, color });
   }
 }
-
 function shoot() {
-  if (shootCooldown > 0) return;
-  guanos.push({ x: player.x, y: player.y + player.h/2, r: 7, vy: GUANO_SPEED, splat: false, splatTimer: 0 });
-  shootCooldown = 12;
+  if (shootCooldown>0) return;
+  guanos.push({x:player.x,y:player.y+player.h/2,r:7,vy:GUANO_SPEED,splat:false,splatTimer:0});
+  shootCooldown=12;
 }
 
-// ---- Draw ----
-
+// ---- Draw helpers ----
 function drawSky() {
-  const grad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
-  grad.addColorStop(0, '#87CEEB'); grad.addColorStop(1, '#b0e0ff');
-  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, GROUND_Y);
+  const g=ctx.createLinearGradient(0,0,0,GROUND_Y);
+  g.addColorStop(0,'#87CEEB'); g.addColorStop(1,'#b0e0ff');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,GROUND_Y);
 }
-
 function drawGround() {
-  const gGrad = ctx.createLinearGradient(0, GROUND_Y, 0, H);
-  gGrad.addColorStop(0, '#5cb85c'); gGrad.addColorStop(0.3, '#4cae4c'); gGrad.addColorStop(1, '#3a8a3a');
-  ctx.fillStyle = gGrad; ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-  ctx.fillStyle = '#555'; ctx.fillRect(0, ROAD_Y - 5, W, 50);
-  ctx.fillStyle = '#fff'; ctx.setLineDash([20, 20]); ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(0, ROAD_Y + 20); ctx.lineTo(W, ROAD_Y + 20); ctx.stroke();
+  const g=ctx.createLinearGradient(0,GROUND_Y,0,H);
+  g.addColorStop(0,'#5cb85c'); g.addColorStop(0.3,'#4cae4c'); g.addColorStop(1,'#3a8a3a');
+  ctx.fillStyle=g; ctx.fillRect(0,GROUND_Y,W,H-GROUND_Y);
+  ctx.fillStyle='#555'; ctx.fillRect(0,ROAD_Y-5,W,50);
+  ctx.fillStyle='#fff'; ctx.setLineDash([20,20]); ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(0,ROAD_Y+20); ctx.lineTo(W,ROAD_Y+20); ctx.stroke();
   ctx.setLineDash([]);
 }
-
 function drawCloud(c) {
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fillStyle='rgba(255,255,255,0.85)';
   ctx.beginPath();
-  ctx.ellipse(c.x, c.y, c.w*0.5, 22, 0, 0, Math.PI*2);
-  ctx.ellipse(c.x-c.w*0.2, c.y+8, c.w*0.3, 18, 0, 0, Math.PI*2);
-  ctx.ellipse(c.x+c.w*0.2, c.y+5, c.w*0.35, 20, 0, 0, Math.PI*2);
+  ctx.ellipse(c.x,c.y,c.w*0.5,22,0,0,Math.PI*2);
+  ctx.ellipse(c.x-c.w*0.2,c.y+8,c.w*0.3,18,0,0,Math.PI*2);
+  ctx.ellipse(c.x+c.w*0.2,c.y+5,c.w*0.35,20,0,0,Math.PI*2);
   ctx.fill();
 }
-
 function drawTree(t) {
-  ctx.fillStyle = '#8B6914'; ctx.fillRect(t.x-5, GROUND_Y-t.h*0.4, 10, t.h*0.4);
-  ctx.fillStyle = '#2d7a2d';
-  ctx.beginPath(); ctx.arc(t.x, GROUND_Y-t.h*0.4, t.h*0.45, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#3a963a';
-  ctx.beginPath(); ctx.arc(t.x-8, GROUND_Y-t.h*0.55, t.h*0.3, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(t.x+6, GROUND_Y-t.h*0.5, t.h*0.32, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle='#8B6914'; ctx.fillRect(t.x-5,GROUND_Y-t.h*0.4,10,t.h*0.4);
+  ctx.fillStyle='#2d7a2d'; ctx.beginPath(); ctx.arc(t.x,GROUND_Y-t.h*0.4,t.h*0.45,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#3a963a';
+  ctx.beginPath(); ctx.arc(t.x-8,GROUND_Y-t.h*0.55,t.h*0.3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(t.x+6,GROUND_Y-t.h*0.5,t.h*0.32,0,Math.PI*2); ctx.fill();
 }
-
 function drawCar(car) {
-  const ox = car.shake ? (Math.random()-0.5)*car.shake : 0;
-  ctx.save(); ctx.translate(ox, 0);
-
-  // Ombra
-  ctx.fillStyle = 'rgba(0,0,0,0.15)';
-  ctx.beginPath(); ctx.ellipse(car.x+car.w/2, car.y+car.h+4, car.w*0.45, 6, 0, 0, Math.PI*2); ctx.fill();
-
-  // Carrozzeria
-  ctx.fillStyle = car.hit ? '#fff' : car.color;
-  ctx.beginPath(); ctx.roundRect(car.x, car.y, car.w, car.h, 6); ctx.fill();
-
-  // Tetto
-  const ri = car.w*0.18;
-  ctx.fillStyle = car.hit ? '#ccc' : shadeColor(car.color, -25);
-  ctx.beginPath(); ctx.roundRect(car.x+ri, car.y-car.h*0.5, car.w-ri*2, car.h*0.55, 5); ctx.fill();
-
-  // Finestrini
-  ctx.fillStyle = 'rgba(150,220,255,0.7)';
-  ctx.fillRect(car.x+ri+3, car.y-car.h*0.48+3, (car.w-ri*2)*0.42, car.h*0.38);
-  ctx.fillRect(car.x+ri+(car.w-ri*2)*0.52, car.y-car.h*0.48+3, (car.w-ri*2)*0.42, car.h*0.38);
-
-  // Ruote
-  ctx.fillStyle = '#222';
-  ctx.beginPath(); ctx.arc(car.x+14, car.y+car.h-1, 9, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(car.x+car.w-14, car.y+car.h-1, 9, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#888';
-  ctx.beginPath(); ctx.arc(car.x+14, car.y+car.h-1, 4, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(car.x+car.w-14, car.y+car.h-1, 4, 0, Math.PI*2); ctx.fill();
-
-  // Guano
+  const ox=car.shake?(Math.random()-0.5)*car.shake:0;
+  ctx.save(); ctx.translate(ox,0);
+  ctx.fillStyle='rgba(0,0,0,0.15)';
+  ctx.beginPath(); ctx.ellipse(car.x+car.w/2,car.y+car.h+4,car.w*0.45,6,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=car.hit?'#fff':car.color;
+  ctx.beginPath(); ctx.roundRect(car.x,car.y,car.w,car.h,6); ctx.fill();
+  const ri=car.w*0.18;
+  ctx.fillStyle=car.hit?'#ccc':shadeColor(car.color,-25);
+  ctx.beginPath(); ctx.roundRect(car.x+ri,car.y-car.h*0.5,car.w-ri*2,car.h*0.55,5); ctx.fill();
+  ctx.fillStyle='rgba(150,220,255,0.7)';
+  ctx.fillRect(car.x+ri+3,car.y-car.h*0.48+3,(car.w-ri*2)*0.42,car.h*0.38);
+  ctx.fillRect(car.x+ri+(car.w-ri*2)*0.52,car.y-car.h*0.48+3,(car.w-ri*2)*0.42,car.h*0.38);
+  ctx.fillStyle='#222';
+  ctx.beginPath(); ctx.arc(car.x+14,car.y+car.h-1,9,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(car.x+car.w-14,car.y+car.h-1,9,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#888';
+  ctx.beginPath(); ctx.arc(car.x+14,car.y+car.h-1,4,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(car.x+car.w-14,car.y+car.h-1,4,0,Math.PI*2); ctx.fill();
   if (car.splatted) {
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    for (let s of car.splats || []) {
-      ctx.beginPath(); ctx.ellipse(car.x+s.rx*car.w, car.y+s.ry*car.h, s.rw, s.rh, s.rot, 0, Math.PI*2); ctx.fill();
-    }
+    ctx.fillStyle='rgba(255,255,255,0.85)';
+    for (const s of car.splats||[]) { ctx.beginPath(); ctx.ellipse(car.x+s.rx*car.w,car.y+s.ry*car.h,s.rw,s.rh,s.rot,0,Math.PI*2); ctx.fill(); }
   }
-
-  // Indicatore macchina imprevedibile: bordo lampeggiante rosso quando sta per cambiare direzione
-  if (car.wild && car.wildTimer < 22 && Math.floor(car.wildTimer/4)%2===0) {
-    ctx.strokeStyle = '#ff3300'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.roundRect(car.x-2, car.y-car.h*0.5-2, car.w+4, car.h*1.5+4, 7); ctx.stroke();
+  if (car.wild&&car.wildTimer<22&&Math.floor(car.wildTimer/4)%2===0) {
+    ctx.strokeStyle='#ff3300'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.roundRect(car.x-2,car.y-car.h*0.5-2,car.w+4,car.h*1.5+4,7); ctx.stroke();
   }
-
   ctx.restore();
 }
-
 function drawGuardian(g) {
   if (!g) return;
-  ctx.save();
-  ctx.translate(g.x, g.y);
-  const facingLeft = g.state === 'fleeing' ? g.fleeDir < 0 : g.x > W/2;
-  if (facingLeft) ctx.scale(-1, 1);
-
-  ctx.fillStyle = 'rgba(0,0,0,0.15)';
-  ctx.beginPath(); ctx.ellipse(0, 2, 14, 4, 0, 0, Math.PI*2); ctx.fill();
-
-  const legOff = g.state === 'fleeing' ? Math.sin(g.timer*0.28)*6 : 0;
-  ctx.fillStyle = '#1a5c1a';
-  ctx.fillRect(-7, -16, 5, 16-legOff); ctx.fillRect(2, -16, 5, 16+legOff);
-  ctx.fillStyle = '#2c1a0e';
-  ctx.fillRect(-9, -2, 8, 4); ctx.fillRect(2, -2, 8, 4);
-
-  ctx.fillStyle = '#2d7a2d'; ctx.fillRect(-9, -34, 18, 18);
-  ctx.fillStyle = '#8B6914'; ctx.fillRect(-9, -18, 18, 3);
-  ctx.fillStyle = '#ffd700'; ctx.fillRect(-2, -19, 4, 5);
-
-  ctx.fillStyle = '#2d7a2d';
-  ctx.fillRect(-14, -32, 5, 14); ctx.fillRect(9, -32, 5, 12);
-
-  ctx.fillStyle = '#8B6914'; ctx.fillRect(-13, -52, 3, 40);
-  ctx.fillStyle = '#c4a35a';
-  for (let i = 0; i < 6; i++) ctx.fillRect(-17+i*3, -14, 2, 7);
-
-  if (g.state !== 'fleeing') {
-    const pumpSpeed = (g.burst && g.burstActive) ? 0.38 : 0.18;
-    const pumpAmp = (g.burst && g.burstActive) ? 5 : 3;
-    const pa = Math.sin(g.pumpTimer * pumpSpeed) * pumpAmp;
-    ctx.fillStyle = '#445566'; ctx.fillRect(10, -36+pa, 5, 22);
-    ctx.fillStyle = '#778899'; ctx.fillRect(8, -38+pa, 9, 4);
-    ctx.fillStyle = '#556677'; ctx.fillRect(10, -16, 5, 5); ctx.fillRect(7, -12, 10, 3);
-    if (g.state === 'pumping') {
-      const glowR = (g.burst && g.burstActive) ? 5 : 3;
-      const glowA = (g.burst && g.burstActive) ? 1.0 : 0.9;
-      ctx.fillStyle = `rgba(80,160,255,${glowA})`;
-      ctx.beginPath(); ctx.arc(12, -10+pa*0.4, glowR, 0, Math.PI*2); ctx.fill();
-      // Alone di luce per raffiche
-      if (g.burst && g.burstActive) {
-        ctx.save();
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = '#88ccff';
-        ctx.beginPath(); ctx.arc(12, -10+pa*0.4, 10, 0, Math.PI*2); ctx.fill();
-        ctx.restore();
+  ctx.save(); ctx.translate(g.x,g.y);
+  const facingLeft=g.state==='fleeing'?g.fleeDir<0:g.x>W/2;
+  if (facingLeft) ctx.scale(-1,1);
+  ctx.fillStyle='rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.ellipse(0,2,14,4,0,0,Math.PI*2); ctx.fill();
+  const lo=g.state==='fleeing'?Math.sin(g.timer*0.28)*6:0;
+  ctx.fillStyle='#1a5c1a'; ctx.fillRect(-7,-16,5,16-lo); ctx.fillRect(2,-16,5,16+lo);
+  ctx.fillStyle='#2c1a0e'; ctx.fillRect(-9,-2,8,4); ctx.fillRect(2,-2,8,4);
+  ctx.fillStyle='#2d7a2d'; ctx.fillRect(-9,-34,18,18);
+  ctx.fillStyle='#8B6914'; ctx.fillRect(-9,-18,18,3);
+  ctx.fillStyle='#ffd700'; ctx.fillRect(-2,-19,4,5);
+  ctx.fillStyle='#2d7a2d'; ctx.fillRect(-14,-32,5,14); ctx.fillRect(9,-32,5,12);
+  ctx.fillStyle='#8B6914'; ctx.fillRect(-13,-52,3,40);
+  ctx.fillStyle='#c4a35a'; for (let i=0;i<6;i++) ctx.fillRect(-17+i*3,-14,2,7);
+  if (g.state!=='fleeing') {
+    const ps=(g.burst&&g.burstActive)?0.38:0.18, pa2=(g.burst&&g.burstActive)?5:3;
+    const pa=Math.sin(g.pumpTimer*ps)*pa2;
+    ctx.fillStyle='#445566'; ctx.fillRect(10,-36+pa,5,22);
+    ctx.fillStyle='#778899'; ctx.fillRect(8,-38+pa,9,4);
+    ctx.fillStyle='#556677'; ctx.fillRect(10,-16,5,5); ctx.fillRect(7,-12,10,3);
+    if (g.state==='pumping') {
+      const glowR=(g.burst&&g.burstActive)?5:3;
+      ctx.fillStyle=`rgba(80,160,255,${(g.burst&&g.burstActive)?1:0.9})`;
+      ctx.beginPath(); ctx.arc(12,-10+pa*0.4,glowR,0,Math.PI*2); ctx.fill();
+      if (g.burst&&g.burstActive) {
+        ctx.save(); ctx.globalAlpha=0.35; ctx.fillStyle='#88ccff';
+        ctx.beginPath(); ctx.arc(12,-10+pa*0.4,10,0,Math.PI*2); ctx.fill(); ctx.restore();
       }
     }
   }
-
-  ctx.fillStyle = '#f4c090';
-  ctx.beginPath(); ctx.arc(0, -42, 9, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#1a5c1a';
-  ctx.fillRect(-11, -52, 22, 5); ctx.fillRect(-8, -61, 16, 10);
-  ctx.fillStyle = '#ffd700'; ctx.fillRect(-3, -59, 6, 5);
-  ctx.fillStyle = '#333';
-  ctx.beginPath(); ctx.arc(-3, -44, 1.5, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc( 3, -44, 1.5, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#555'; ctx.fillRect(-4, -39, 8, 2);
-
+  ctx.fillStyle='#f4c090'; ctx.beginPath(); ctx.arc(0,-42,9,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#1a5c1a'; ctx.fillRect(-11,-52,22,5); ctx.fillRect(-8,-61,16,10);
+  ctx.fillStyle='#ffd700'; ctx.fillRect(-3,-59,6,5);
+  ctx.fillStyle='#333';
+  ctx.beginPath(); ctx.arc(-3,-44,1.5,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 3,-44,1.5,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#555'; ctx.fillRect(-4,-39,8,2);
   ctx.restore();
 }
-
 function drawWaterDrops() {
-  for (let w of waterDrops) {
-    ctx.save(); ctx.globalAlpha = Math.min(1, w.life*6)*0.88;
-    ctx.fillStyle = 'rgba(100,180,255,0.35)';
-    ctx.beginPath(); ctx.arc(w.x-w.vx, w.y-w.vy*0.4, w.r*0.65, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#5dade2';
-    ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.beginPath(); ctx.arc(w.x-w.r*0.3, w.y-w.r*0.3, w.r*0.35, 0, Math.PI*2); ctx.fill();
+  for (const w of waterDrops) {
+    ctx.save(); ctx.globalAlpha=Math.min(1,w.life*6)*0.88;
+    ctx.fillStyle='rgba(100,180,255,0.35)';
+    ctx.beginPath(); ctx.arc(w.x-w.vx,w.y-w.vy*0.4,w.r*0.65,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#5dade2'; ctx.beginPath(); ctx.arc(w.x,w.y,w.r,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.7)';
+    ctx.beginPath(); ctx.arc(w.x-w.r*0.3,w.y-w.r*0.3,w.r*0.35,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
 }
-
 function drawPigeon(p) {
-  p.frame++;
-  if (p.frame%6===0) { p.wing+=p.wingDir*0.4; if (Math.abs(p.wing)>1) p.wingDir*=-1; }
+  p.frame++; if(p.frame%6===0){p.wing+=p.wingDir*0.4;if(Math.abs(p.wing)>1)p.wingDir*=-1;}
   ctx.save();
-  if (p.invincibleTimer>0 && Math.floor(p.invincibleTimer/5)%2===0) ctx.globalAlpha=0.35;
-  ctx.translate(p.x, p.y);
-  ctx.fillStyle='rgba(0,0,0,0.1)';
-  ctx.beginPath(); ctx.ellipse(0,p.h*0.6,22,6,0,0,Math.PI*2); ctx.fill();
-  const wu=Math.sin(p.frame*0.15)*15;
-  ctx.fillStyle='#8899aa';
+  if(p.invincibleTimer>0&&Math.floor(p.invincibleTimer/5)%2===0) ctx.globalAlpha=0.35;
+  ctx.translate(p.x,p.y);
+  ctx.fillStyle='rgba(0,0,0,0.1)'; ctx.beginPath(); ctx.ellipse(0,p.h*0.6,22,6,0,0,Math.PI*2); ctx.fill();
+  const wu=Math.sin(p.frame*0.15)*15; ctx.fillStyle='#8899aa';
   ctx.beginPath(); ctx.ellipse(-p.w*0.45,-5-wu,p.w*0.38,11,-0.3,0,Math.PI*2); ctx.fill();
   ctx.beginPath(); ctx.ellipse( p.w*0.45,-5-wu,p.w*0.38,11, 0.3,0,Math.PI*2); ctx.fill();
   ctx.fillStyle='#778899'; ctx.beginPath(); ctx.ellipse(0,4,p.w*0.32,p.h*0.38,0,0,Math.PI*2); ctx.fill();
@@ -453,347 +413,320 @@ function drawPigeon(p) {
   ctx.moveTo(p.w*0.52,-7); ctx.lineTo(p.w*0.52+12,-5); ctx.lineTo(p.w*0.52,-3); ctx.fill();
   ctx.restore();
 }
-
 function drawGuano(g) {
   if (g.splat) {
     const t=1-g.splatTimer/20; ctx.save(); ctx.globalAlpha=t; ctx.fillStyle='#f5f5f5';
     ctx.beginPath(); ctx.ellipse(g.x,g.y,g.r*2.5*(2-t),g.r*(2-t),0,0,Math.PI*2); ctx.fill();
-    for (let i=0;i<4;i++) { ctx.beginPath(); ctx.arc(g.x+Math.cos(i*1.57)*g.r*3,g.y+Math.sin(i*1.57)*g.r*2,g.r*0.6,0,Math.PI*2); ctx.fill(); }
+    for(let i=0;i<4;i++){ctx.beginPath();ctx.arc(g.x+Math.cos(i*1.57)*g.r*3,g.y+Math.sin(i*1.57)*g.r*2,g.r*0.6,0,Math.PI*2);ctx.fill();}
     ctx.restore(); return;
   }
   ctx.fillStyle='rgba(245,245,245,0.3)';
-  for (let i=1;i<=3;i++) { ctx.beginPath(); ctx.arc(g.x,g.y-i*10,g.r*(1-i*0.25),0,Math.PI*2); ctx.fill(); }
+  for(let i=1;i<=3;i++){ctx.beginPath();ctx.arc(g.x,g.y-i*10,g.r*(1-i*0.25),0,Math.PI*2);ctx.fill();}
   ctx.fillStyle='#f0f0e0'; ctx.strokeStyle='#ccc'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.arc(g.x,g.y,g.r,0,Math.PI*2); ctx.fill(); ctx.stroke();
 }
-
 function drawParticles() {
-  for (let p of particles) {
-    ctx.save(); ctx.globalAlpha=p.life; ctx.fillStyle=p.color;
-    ctx.beginPath(); ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2); ctx.fill(); ctx.restore();
-  }
+  for(const p of particles){ctx.save();ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);ctx.fill();ctx.restore();}
 }
-
 function drawPopups() {
-  for (let pop of popups) {
-    ctx.save(); ctx.globalAlpha=pop.life; ctx.fillStyle=pop.color||'#FFD700';
-    ctx.font=`bold ${pop.size||22}px Courier New`; ctx.textAlign='center';
-    ctx.fillText(pop.text,pop.x,pop.y); ctx.restore();
-  }
+  for(const pop of popups){ctx.save();ctx.globalAlpha=pop.life;ctx.fillStyle=pop.color||'#FFD700';ctx.font=`bold ${pop.size||22}px Courier New`;ctx.textAlign='center';ctx.fillText(pop.text,pop.x,pop.y);ctx.restore();}
 }
-
 function drawHitEffect(car) {
-  if (!car.hit) return;
-  ctx.save(); ctx.globalAlpha=car.hitTimer/15*0.4; ctx.fillStyle='#FFD700';
-  ctx.beginPath(); ctx.roundRect(car.x-3,car.y-car.h*0.5-3,car.w+6,car.h*1.5+6,8); ctx.fill(); ctx.restore();
+  if(!car.hit)return;
+  ctx.save();ctx.globalAlpha=car.hitTimer/15*0.4;ctx.fillStyle='#FFD700';
+  ctx.beginPath();ctx.roundRect(car.x-3,car.y-car.h*0.5-3,car.w+6,car.h*1.5+6,8);ctx.fill();ctx.restore();
 }
 
-// Annuncio livello drammatico
-const LEVEL_SUBTITLES = {
-  3: '🚗 PIÙ TRAFFICO!',
-  4: '🚗 GUARDIANO PIÙ VELOCE!',
-  5: '💦 RAFFICHE D\'ACQUA!',
-  6: '⚠️ DUE GUARDIANI!',
-};
-function getLevelSubtitle(lv) {
-  if (LEVEL_SUBTITLES[lv]) return LEVEL_SUBTITLES[lv];
-  if (lv >= 7) return '😱 CAOS TOTALE!';
-  return '';
+// ---- Touch controls drawn on canvas ----
+function drawArrow(x, y, angle) {
+  ctx.save(); ctx.translate(x,y); ctx.rotate(angle);
+  ctx.beginPath(); ctx.moveTo(0,-7); ctx.lineTo(-5,4); ctx.lineTo(5,4); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function drawTouchControls() {
+  if (intro||gameOver) return;
+  ctx.save();
+
+  // --- Joystick ---
+  const kx=JOY_CX+joyKnobX, ky=JOY_CY+joyKnobY;
+  // Base fill
+  ctx.globalAlpha=0.14; ctx.fillStyle='#ffffff';
+  ctx.beginPath(); ctx.arc(JOY_CX,JOY_CY,JOY_R,0,Math.PI*2); ctx.fill();
+  // Base ring
+  ctx.globalAlpha=0.3; ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(JOY_CX,JOY_CY,JOY_R,0,Math.PI*2); ctx.stroke();
+  // Inner ring (dead zone hint)
+  ctx.globalAlpha=0.12; ctx.beginPath(); ctx.arc(JOY_CX,JOY_CY,18,0,Math.PI*2); ctx.stroke();
+  // Direction arrows
+  const off=JOY_R-15;
+  ctx.globalAlpha=0.42; ctx.fillStyle='#ffffff';
+  drawArrow(JOY_CX,       JOY_CY-off, 0);           // su
+  drawArrow(JOY_CX,       JOY_CY+off, Math.PI);      // giù
+  drawArrow(JOY_CX-off,   JOY_CY,    -Math.PI/2);    // sinistra
+  drawArrow(JOY_CX+off,   JOY_CY,     Math.PI/2);    // destra
+  // Knob
+  ctx.globalAlpha=joyTouchId!==null?0.88:0.58;
+  const kg=ctx.createRadialGradient(kx-5,ky-5,2,kx,ky,JOY_KNOB_R);
+  kg.addColorStop(0,'#c0d8ee'); kg.addColorStop(1,'#2a3a4a');
+  ctx.fillStyle=kg; ctx.beginPath(); ctx.arc(kx,ky,JOY_KNOB_R,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='rgba(180,215,245,0.8)'; ctx.lineWidth=1.5; ctx.stroke();
+
+  // --- Pulsante SPARA ---
+  const pressed=fireTouchId!==null, fr=pressed?FIRE_R+5:FIRE_R;
+  ctx.globalAlpha=pressed?0.9:0.42;
+  const fg=ctx.createRadialGradient(FIRE_CX-14,FIRE_CY-14,4,FIRE_CX,FIRE_CY,fr);
+  fg.addColorStop(0,'#ff9999'); fg.addColorStop(1,'#aa1111');
+  ctx.fillStyle=fg; ctx.beginPath(); ctx.arc(FIRE_CX,FIRE_CY,fr,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='rgba(255,180,180,0.75)'; ctx.lineWidth=2; ctx.stroke();
+  ctx.globalAlpha=pressed?1:0.92; ctx.fillStyle='#fff'; ctx.textAlign='center';
+  ctx.font=`bold ${pressed?18:17}px Courier New`;
+  ctx.fillText('SPARA',FIRE_CX,FIRE_CY+7);
+
+  // Pausa: mostra hint "tocca per continuare"
+  if (paused) {
+    ctx.globalAlpha=0.6; ctx.fillStyle='#ffd700';
+    ctx.font='bold 14px Courier New';
+    ctx.fillText('tocca per continuare',W/2,H-12);
+  }
+
+  ctx.restore();
 }
 
-function triggerLevelUp() {
-  levelUpAnim = { level, timer: 0, maxTimer: 145 };
-}
-
+// ---- Level up ----
+const LEVEL_SUBTITLES = {3:'🚗 PIÙ TRAFFICO!',4:'🚗 GUARDIANO PIÙ VELOCE!',5:'💦 RAFFICHE D\'ACQUA!',6:'⚠️ DUE GUARDIANI!'};
+function getLevelSubtitle(lv) { return LEVEL_SUBTITLES[lv]||(lv>=7?'😱 CAOS TOTALE!':''); }
+function triggerLevelUp()      { levelUpAnim={level,timer:0,maxTimer:145}; }
 function drawLevelUp() {
   if (!levelUpAnim) return;
-  const t = levelUpAnim.timer / levelUpAnim.maxTimer;
-  if (t > 1) { levelUpAnim = null; return; }
-
-  // Flash bianco all'inizio
-  if (t < 0.14) {
-    ctx.fillStyle = `rgba(255,255,200,${(1 - t/0.14)*0.62})`;
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  // Scala e alpha del testo
-  let scale, alpha;
-  if (t < 0.16) {
-    scale = 0.25 + (t/0.16) * 1.05;
-    alpha = t / 0.16;
-  } else if (t < 0.72) {
-    const pulse = 1 + Math.sin((t-0.16)*8)*0.04;
-    scale = 1.3 * pulse;
-    alpha = 1;
-  } else {
-    scale = 1.28;
-    alpha = 1 - (t - 0.72) / 0.28;
-  }
-
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.translate(W/2, H/2 - 18);
-  ctx.scale(scale, scale);
-  ctx.textAlign = 'center';
-  ctx.shadowColor = '#c04000'; ctx.shadowBlur = 28;
-  ctx.fillStyle = '#ffd700';
-  ctx.font = 'bold 68px Courier New';
-  ctx.fillText('LIVELLO ' + levelUpAnim.level + '!', 0, 0);
-  ctx.shadowBlur = 0;
-
-  const sub = getLevelSubtitle(levelUpAnim.level);
-  if (sub) {
-    ctx.fillStyle = '#ff6b6b';
-    ctx.font = 'bold 21px Courier New';
-    ctx.fillText(sub, 0, 52);
-  }
+  const t=levelUpAnim.timer/levelUpAnim.maxTimer;
+  if (t>1){levelUpAnim=null;return;}
+  if (t<0.14){ctx.fillStyle=`rgba(255,255,200,${(1-t/0.14)*0.62})`;ctx.fillRect(0,0,W,H);}
+  let scale,alpha;
+  if      (t<0.16){scale=0.25+(t/0.16)*1.05;alpha=t/0.16;}
+  else if (t<0.72){scale=1.3*(1+Math.sin((t-0.16)*8)*0.04);alpha=1;}
+  else            {scale=1.28;alpha=1-(t-0.72)/0.28;}
+  ctx.save(); ctx.globalAlpha=alpha; ctx.translate(W/2,H/2-18); ctx.scale(scale,scale); ctx.textAlign='center';
+  ctx.shadowColor='#c04000'; ctx.shadowBlur=28; ctx.fillStyle='#ffd700';
+  ctx.font='bold 68px Courier New'; ctx.fillText('LIVELLO '+levelUpAnim.level+'!',0,0);
+  ctx.shadowBlur=0;
+  const sub=getLevelSubtitle(levelUpAnim.level);
+  if (sub){ctx.fillStyle='#ff6b6b';ctx.font='bold 21px Courier New';ctx.fillText(sub,0,52);}
   ctx.restore();
 }
 
 function drawCreditsLine() {
-  ctx.fillStyle = 'rgba(180,180,255,0.85)';
-  ctx.font = 'italic 13px Courier New'; ctx.textAlign = 'center';
-  ctx.fillText('Gioco sviluppato da Antonio Moliterni (Ananasso Malvagio)', W/2, H-16);
+  ctx.fillStyle='rgba(180,180,255,0.85)'; ctx.font='italic 13px Courier New'; ctx.textAlign='center';
+  ctx.fillText('Gioco sviluppato da Antonio Moliterni (Ananasso Malvagio)',W/2,H-16);
 }
-
 function drawIntro() {
-  drawSky();
-  for (let c of clouds) drawCloud(c);
-  for (let t of trees) drawTree(t);
-  drawGround();
-  ctx.fillStyle = 'rgba(10,10,30,0.52)'; ctx.fillRect(0,0,W,H);
+  drawSky(); for(const c of clouds)drawCloud(c); for(const t of trees)drawTree(t); drawGround();
+  ctx.fillStyle='rgba(10,10,30,0.52)'; ctx.fillRect(0,0,W,H);
   ctx.textAlign='center'; ctx.shadowColor='#000'; ctx.shadowBlur=14;
-  ctx.fillStyle='#fff'; ctx.font='bold 52px Courier New';
-  ctx.fillText('🐦 PICCIONE SHOOTER 🐦', W/2, 98);
-  ctx.shadowBlur=0;
-  ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.font='16px Courier New';
-  ctx.fillText('Il piccione più scorretto del parco', W/2, 128);
-  const savedX=player.x, savedY=player.y;
-  player.x=W/2; player.y=215; drawPigeon(player); player.x=savedX; player.y=savedY;
+  ctx.fillStyle='#fff'; ctx.font='bold 52px Courier New'; ctx.fillText('🐦 PICCIONE SHOOTER 🐦',W/2,98);
+  ctx.shadowBlur=0; ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.font='16px Courier New';
+  ctx.fillText('Il piccione più scorretto del parco',W/2,128);
+  const sx=player.x,sy=player.y; player.x=W/2; player.y=215; drawPigeon(player); player.x=sx; player.y=sy;
   const pulse=0.5+0.5*Math.sin(Date.now()*0.003);
   ctx.globalAlpha=0.55+0.45*pulse; ctx.fillStyle='#FFD700'; ctx.font='bold 22px Courier New';
-  ctx.fillText('Clicca o premi INVIO per iniziare', W/2, 318);
-  ctx.globalAlpha=1; ctx.fillStyle='rgba(200,200,200,0.65)'; ctx.font='14px Courier New';
-  ctx.fillText('← → ↑ ↓ muovi  |  SPAZIO spara  |  P pausa', W/2, 352);
+  ctx.fillText('Tocca o premi INVIO per iniziare',W/2,310);
+  ctx.globalAlpha=1; ctx.fillStyle='rgba(200,200,200,0.65)'; ctx.font='13px Courier New';
+  ctx.fillText('PC: ← → ↑ ↓ + SPAZIO  |  Mobile: joystick + SPARA',W/2,345);
+  ctx.fillStyle='rgba(180,220,255,0.55)'; ctx.font='12px Courier New';
+  ctx.fillText('Ruota il dispositivo in orizzontale per la migliore esperienza',W/2,370);
   drawCreditsLine();
 }
-
 function drawGameOver() {
   ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fillRect(0,0,W,H);
   ctx.textAlign='center'; ctx.fillStyle='#e74c3c'; ctx.font='bold 60px Courier New';
-  ctx.fillText('GAME OVER', W/2, H/2-38);
-  ctx.fillStyle='#fff'; ctx.font='28px Courier New';
-  ctx.fillText('Punteggio finale: '+score, W/2, H/2+20);
+  ctx.fillText('GAME OVER',W/2,H/2-38);
+  ctx.fillStyle='#fff'; ctx.font='28px Courier New'; ctx.fillText('Punteggio finale: '+score,W/2,H/2+20);
   ctx.font='20px Courier New'; ctx.fillStyle='#aaa';
-  ctx.fillText('Premi INVIO per ricominciare', W/2, H/2+64);
+  ctx.fillText('INVIO o tocca per ricominciare',W/2,H/2+64);
   drawCreditsLine();
 }
 
-function shadeColor(color, amount) {
-  let r=parseInt(color.slice(1,3),16)+amount, g=parseInt(color.slice(3,5),16)+amount, b=parseInt(color.slice(5,7),16)+amount;
-  r=Math.max(0,Math.min(255,r)); g=Math.max(0,Math.min(255,g)); b=Math.max(0,Math.min(255,b));
+function shadeColor(c,a){
+  let r=parseInt(c.slice(1,3),16)+a,g=parseInt(c.slice(3,5),16)+a,b=parseInt(c.slice(5,7),16)+a;
+  r=Math.max(0,Math.min(255,r));g=Math.max(0,Math.min(255,g));b=Math.max(0,Math.min(255,b));
   return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
 }
 
 // ---- Game loop ----
-
 function update() {
-  for (let c of clouds) { c.x+=c.s; if (c.x-c.w>W) c.x=-c.w; }
-  if (levelUpAnim) { levelUpAnim.timer++; if (levelUpAnim.timer>levelUpAnim.maxTimer) levelUpAnim=null; }
+  for(const c of clouds){c.x+=c.s;if(c.x-c.w>W)c.x=-c.w;}
+  if(levelUpAnim){levelUpAnim.timer++;if(levelUpAnim.timer>levelUpAnim.maxTimer)levelUpAnim=null;}
+  if(intro||paused||gameOver) return;
 
-  if (intro || paused || gameOver) return;
+  // Movimento player: tastiera + joystick (analogico proporzionale)
+  let dx=0, dy=0;
+  if(keys['ArrowLeft'] ||keys['KeyA']) dx-=1;
+  if(keys['ArrowRight']||keys['KeyD']) dx+=1;
+  if(keys['ArrowUp']   ||keys['KeyW']) dy-=1;
+  if(keys['ArrowDown'] ||keys['KeyS']) dy+=1;
+  if(Math.abs(joyDx)>0.08) dx+=joyDx;
+  if(Math.abs(joyDy)>0.08) dy+=joyDy;
+  dx=Math.max(-1,Math.min(1,dx)); dy=Math.max(-1,Math.min(1,dy));
+  player.x=Math.max(player.w/2+5, Math.min(W-player.w/2-5, player.x+player.speed*dx));
+  player.y=Math.max(30,            Math.min(GROUND_Y-60,    player.y+player.speed*dy));
 
-  if (keys['ArrowLeft'] ||keys['KeyA']) player.x=Math.max(player.w/2+5, player.x-player.speed);
-  if (keys['ArrowRight']||keys['KeyD']) player.x=Math.min(W-player.w/2-5, player.x+player.speed);
-  if (keys['ArrowUp']   ||keys['KeyW']) player.y=Math.max(30, player.y-player.speed);
-  if (keys['ArrowDown'] ||keys['KeyS']) player.y=Math.min(GROUND_Y-60, player.y+player.speed);
-  if ((keys['Space']||keys['KeyZ']) && shootCooldown<=0) shoot();
-  if (shootCooldown>0) shootCooldown--;
-  if (player.invincibleTimer>0) player.invincibleTimer--;
+  if((keys['Space']||keys['KeyZ'])&&shootCooldown<=0) shoot();
+  if(shootCooldown>0) shootCooldown--;
+  if(player.invincibleTimer>0) player.invincibleTimer--;
 
-  // Macchine mobili +15%/livello, wild dal livello 5
-  for (let car of cars) {
-    if (car.destroyed) continue;
-    car.x += car.vx;
-    if (car.x<=0)       { car.x=0;         car.vx= Math.abs(car.vx); }
-    if (car.x+car.w>=W) { car.x=W-car.w;   car.vx=-Math.abs(car.vx); }
-    if (car.wild) {
+  // Macchine
+  for(const car of cars){
+    if(car.destroyed)continue;
+    car.x+=car.vx;
+    if(car.x<=0)      {car.x=0;      car.vx= Math.abs(car.vx);}
+    if(car.x+car.w>=W){car.x=W-car.w;car.vx=-Math.abs(car.vx);}
+    if(car.wild){
       car.wildTimer--;
-      if (car.wildTimer<=0) {
-        car.vx = (Math.random()<0.5?1:-1) * (Math.abs(car.vx)*(0.8+Math.random()*0.4));
-        car.wildTimer = 45 + Math.random()*75;
+      if(car.wildTimer<=0){
+        car.vx=(Math.random()<0.5?1:-1)*(Math.abs(car.vx)*(0.8+Math.random()*0.4));
+        car.wildTimer=45+Math.random()*75;
       }
     }
   }
 
   // Guano
-  for (let g of guanos) {
-    if (!g.splat) {
-      g.y += g.vy;
-
-      // Colpisce guardiano?
-      if (!g.splat) {
-        for (let gi of guardians) {
-          if (gi.state!=='fleeing' && g.x>gi.x-18&&g.x<gi.x+18&&g.y>gi.y-64&&g.y<gi.y) {
-            g.splat=true; g.splatTimer=20;
-            gi.state='fleeing';
-            spawnParticles(gi.x, gi.y-30, '#f0f0e0');
+  for(const g of guanos){
+    if(!g.splat){
+      g.y+=g.vy;
+      if(!g.splat){
+        for(const gi of guardians){
+          if(gi.state!=='fleeing'&&g.x>gi.x-18&&g.x<gi.x+18&&g.y>gi.y-64&&g.y<gi.y){
+            g.splat=true;g.splatTimer=20;gi.state='fleeing';
+            spawnParticles(gi.x,gi.y-30,'#f0f0e0');
             popups.push({x:gi.x,y:gi.y-72,text:'NOOO! LA DIVISA!',life:2.5,color:'#ff6b35',size:19});
-            score+=200; document.getElementById('score').textContent=score;
-            break;
+            score+=200;document.getElementById('score').textContent=score;break;
           }
         }
       }
-
-      // Colpisce macchina?
-      if (!g.splat) {
-        for (let car of cars) {
-          if (!car.destroyed&&g.x>car.x&&g.x<car.x+car.w&&g.y+g.r>car.y-car.h*0.5&&g.y-g.r<car.y+car.h) {
-            g.splat=true; g.splatTimer=20;
-            car.hp--; car.hit=true; car.hitTimer=15; car.shake=5;
+      if(!g.splat){
+        for(const car of cars){
+          if(!car.destroyed&&g.x>car.x&&g.x<car.x+car.w&&g.y+g.r>car.y-car.h*0.5&&g.y-g.r<car.y+car.h){
+            g.splat=true;g.splatTimer=20;car.hp--;car.hit=true;car.hitTimer=15;car.shake=5;
             spawnParticles(g.x,g.y,'#f0f0e0');
-            const pts=10*level; score+=pts;
+            const pts=10*level;score+=pts;
             popups.push({x:g.x,y:car.y-30,text:'+'+pts,life:1,color:'#FFD700',size:24});
-            if (!car.splats) car.splats=[];
+            if(!car.splats)car.splats=[];
             car.splats.push({rx:(g.x-car.x)/car.w,ry:0.3+Math.random()*0.4,rw:8+Math.random()*8,rh:5+Math.random()*5,rot:Math.random()*Math.PI});
             car.splatted=true;
-            if (car.hp<=0) {
-              car.destroyed=true; spawnParticles(car.x+car.w/2,car.y,car.color);
-              score+=50*level;
-              popups.push({x:car.x+car.w/2,y:car.y-50,text:'DISTRUTTA! +'+(50*level),life:1,color:'#FF6B6B',size:20});
-            }
-            document.getElementById('score').textContent=score; break;
+            if(car.hp<=0){car.destroyed=true;spawnParticles(car.x+car.w/2,car.y,car.color);score+=50*level;
+              popups.push({x:car.x+car.w/2,y:car.y-50,text:'DISTRUTTA! '+(50*level),life:1,color:'#FF6B6B',size:20});}
+            document.getElementById('score').textContent=score;break;
           }
         }
       }
-
-      if (!g.splat && g.y>ROAD_Y+20) {
-        g.splat=true; g.splatTimer=20; lives--;
+      if(!g.splat&&g.y>ROAD_Y+20){
+        g.splat=true;g.splatTimer=20;lives--;
         document.getElementById('lives').textContent=lives;
         popups.push({x:g.x,y:ROAD_Y-10,text:'MANCATA!',life:1,color:'#e74c3c',size:18});
-        if (lives<=0) gameOver=true;
+        if(lives<=0)gameOver=true;
       }
-    } else { g.splatTimer--; }
+    } else {g.splatTimer--;}
   }
   guanos=guanos.filter(g=>!(g.splat&&g.splatTimer<=0));
 
-  for (let car of cars) {
-    if (car.hit) { car.hitTimer--; if (car.hitTimer<=0){car.hit=false;car.shake=0;} }
-    if (car.shake>0) car.shake*=0.8;
+  for(const car of cars){
+    if(car.hit){car.hitTimer--;if(car.hitTimer<=0){car.hit=false;car.shake=0;}}
+    if(car.shake>0)car.shake*=0.8;
   }
 
   // Guardiani
-  for (let g of guardians) {
-    g.timer++; g.pumpTimer++;
-    if (g.state==='fleeing') {
-      g.x += g.fleeDir*6;
-    } else {
-      if (g.timer>38) g.state='pumping';
-      updateGuardianPump(g);
-      if (g.timer>g.duration) g.state='fleeing';
-    }
+  for(const g of guardians){
+    g.timer++;g.pumpTimer++;
+    if(g.state==='fleeing'){g.x+=g.fleeDir*6;}
+    else{if(g.timer>38)g.state='pumping';updateGuardianPump(g);if(g.timer>g.duration)g.state='fleeing';}
   }
-  const prevCount = guardians.length;
-  guardians = guardians.filter(g=>!(g.state==='fleeing'&&(g.x<-90||g.x>W+90)));
-  if (guardians.length<prevCount) updateMusic();
+  const prev=guardians.length;
+  guardians=guardians.filter(g=>!(g.state==='fleeing'&&(g.x<-90||g.x>W+90)));
+  if(guardians.length<prev)updateMusic();
 
-  // Spawn nuovo guardiano se sotto il massimo
-  const maxG = getMaxGuardians();
-  if (guardians.length<maxG) {
-    guardianSpawnTimer--;
-    if (guardianSpawnTimer<=0) {
-      spawnGuardian();
-      guardianSpawnTimer=getGuardianSpawnInterval();
-    }
+  const maxG=getMaxGuardians();
+  if(guardians.length<maxG){
+    if(--guardianSpawnTimer<=0){spawnGuardian();guardianSpawnTimer=getGuardianSpawnInterval();}
   }
 
-  // Getti d'acqua
-  for (let w of waterDrops) {
-    w.x+=w.vx; w.y+=w.vy; w.vy+=0.12; w.life-=0.007;
-    if (player.invincibleTimer<=0) {
-      const dx=w.x-player.x, dy=w.y-player.y;
-      if (Math.sqrt(dx*dx+dy*dy)<player.w*0.35+w.r) {
-        w.life=0; lives--;
-        document.getElementById('lives').textContent=lives;
+  // Acqua
+  for(const w of waterDrops){
+    w.x+=w.vx;w.y+=w.vy;w.vy+=0.12;w.life-=0.007;
+    if(player.invincibleTimer<=0){
+      if(Math.hypot(w.x-player.x,w.y-player.y)<player.w*0.35+w.r){
+        w.life=0;lives--;document.getElementById('lives').textContent=lives;
         player.invincibleTimer=130;
         popups.push({x:player.x,y:player.y-28,text:'BAGNATO!',life:2.5,color:'#3498db',size:30});
-        if (lives<=0) gameOver=true;
+        if(lives<=0)gameOver=true;
       }
     }
-    if (w.y>H||w.y<-60) w.life=0;
+    if(w.y>H||w.y<-60)w.life=0;
   }
   waterDrops=waterDrops.filter(w=>w.life>0);
 
-  for (let p of particles) { p.x+=p.vx; p.y+=p.vy; p.vy+=0.1; p.life-=p.decay; }
+  for(const p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=0.1;p.life-=p.decay;}
   particles=particles.filter(p=>p.life>0);
-
-  for (let pop of popups) { pop.y-=1.5; pop.life-=0.025; }
+  for(const pop of popups){pop.y-=1.5;pop.life-=0.025;}
   popups=popups.filter(p=>p.life>0);
 
-  // Livello successivo
-  if (cars.every(c=>c.destroyed)) {
-    level++;
-    document.getElementById('level').textContent=level;
-    triggerLevelUp();
-    spawnCars();
+  if(cars.every(c=>c.destroyed)){
+    level++;document.getElementById('level').textContent=level;
+    triggerLevelUp();spawnCars();
   }
 }
 
 function draw() {
-  ctx.clearRect(0, 0, W, H);
-  if (intro) { drawIntro(); return; }
-
-  drawSky();
-  for (let c of clouds) drawCloud(c);
-  for (let t of trees) drawTree(t);
+  ctx.clearRect(0,0,W,H);
+  if(intro){drawIntro();return;}
+  drawSky(); for(const c of clouds)drawCloud(c); for(const t of trees)drawTree(t);
   drawGround();
-  for (let car of cars) if (!car.destroyed) { drawHitEffect(car); drawCar(car); }
-  for (let g of guardians) drawGuardian(g);
-  drawWaterDrops();
-  for (let g of guanos) drawGuano(g);
-  drawPigeon(player);
-  drawParticles();
-  drawPopups();
+  for(const car of cars)if(!car.destroyed){drawHitEffect(car);drawCar(car);}
+  for(const g of guardians)drawGuardian(g);
+  drawWaterDrops(); for(const g of guanos)drawGuano(g);
+  drawPigeon(player); drawParticles(); drawPopups();
+  drawTouchControls();
   drawLevelUp();
-
-  if (paused) {
-    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(0,0,W,H);
-    ctx.fillStyle='#fff'; ctx.font='bold 48px Courier New'; ctx.textAlign='center';
-    ctx.fillText('PAUSA',W/2,H/2); ctx.font='20px Courier New';
-    ctx.fillText('Premi P per continuare',W/2,H/2+40);
+  if(paused){
+    ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#fff';ctx.font='bold 48px Courier New';ctx.textAlign='center';ctx.fillText('PAUSA',W/2,H/2);
+    ctx.font='20px Courier New';ctx.fillText('Premi P o tocca per continuare',W/2,H/2+40);
   }
-  if (gameOver) drawGameOver();
+  if(gameOver)drawGameOver();
 }
 
-function startGame() { intro=false; startAudio(); }
-
-function reset() {
-  score=0; lives=3; level=1; paused=false; gameOver=false;
-  guanos=[]; particles=[]; popups=[]; shootCooldown=0;
-  waterDrops=[]; guardians=[]; guardianSpawnTimer=300; levelUpAnim=null;
-  player.x=W/2; player.y=80; player.invincibleTimer=0;
+function startGame(){intro=false;startAudio();}
+function reset(){
+  score=0;lives=3;level=1;paused=false;gameOver=false;
+  guanos=[];particles=[];popups=[];shootCooldown=0;
+  waterDrops=[];guardians=[];guardianSpawnTimer=300;levelUpAnim=null;
+  player.x=W/2;player.y=80;player.invincibleTimer=0;
+  resetJoystick();fireTouchId=null;
   document.getElementById('score').textContent=0;
   document.getElementById('lives').textContent=3;
   document.getElementById('level').textContent=1;
-  currentTrack='park'; guardianMusic.pause();
-  if (!muted) bgMusic.play().catch(()=>{});
+  currentTrack='park';guardianMusic.pause();
+  if(!muted)bgMusic.play().catch(()=>{});
   spawnCars();
 }
 
-window.addEventListener('keydown', e => {
+window.addEventListener('keydown',e=>{
   keys[e.code]=true;
-  if (e.code==='Space') e.preventDefault();
-  if (intro&&(e.code==='Enter'||e.code==='Space')) { startGame(); return; }
-  if (e.code==='KeyP'&&!intro) paused=!paused;
-  if (e.code==='Enter'&&gameOver) reset();
+  if(e.code==='Space')e.preventDefault();
+  if(intro&&(e.code==='Enter'||e.code==='Space')){startGame();return;}
+  if(e.code==='KeyP'&&!intro)paused=!paused;
+  if(e.code==='Enter'&&gameOver)reset();
 });
-window.addEventListener('keyup', e => { keys[e.code]=false; });
+window.addEventListener('keyup',e=>{keys[e.code]=false;});
 
-canvas.addEventListener('click', ()=>{ if (intro){startGame();return;} if(!gameOver&&!paused) shoot(); });
-canvas.addEventListener('touchstart', e=>{ e.preventDefault(); if(intro){startGame();return;} if(!gameOver&&!paused) shoot(); },{passive:false});
+canvas.addEventListener('click',()=>{
+  if(intro){startGame();return;}
+  if(gameOver){reset();return;}
+  if(!paused)shoot();
+});
 
-function loop() { update(); draw(); requestAnimationFrame(loop); }
+function loop(){update();draw();requestAnimationFrame(loop);}
+
 spawnCars();
+resizeCanvas();
 loop();
 </script>
 </body>
