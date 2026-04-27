@@ -87,6 +87,18 @@ let popups = [];
 let guardians = [], guardianSpawnTimer = 300, waterDrops = [];
 let levelUpAnim = null;
 
+// --- Anziana Signora (Nonna) ---
+let nonna = null;
+let nonnaSpawnTimer = 900 + Math.floor(Math.random()*400);
+let breadcrumbs = [];
+let escortActive = false, escortTimer = 0;
+
+// --- Super Guano Diarrea ---
+let superDiarrea = false, superDiarreaTimer = 0;
+const SUPER_DIARREA_DUR = 480; // 8 secondi a ~60fps
+let superAutoShootTimer = 0;
+let screenFlashR = 0;
+
 // --- Audio ---
 const bgMusic = new Audio('park%20theme.mp3');
 const guardianMusic = new Audio('guardian%20theme.mp3');
@@ -112,6 +124,56 @@ function toggleMute() {
   document.getElementById('muteBtn').textContent = muted ? '🔇' : '🔊';
 }
 
+function playGuardianSound() {
+  try {
+    const ac=new(window.AudioContext||window.webkitAudioContext)();
+    const osc=ac.createOscillator(), gain=ac.createGain();
+    osc.connect(gain); gain.connect(ac.destination); osc.type='square';
+    osc.frequency.setValueAtTime(880,ac.currentTime);
+    osc.frequency.setValueAtTime(660,ac.currentTime+0.12);
+    osc.frequency.setValueAtTime(880,ac.currentTime+0.24);
+    gain.gain.setValueAtTime(0.12,ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.42);
+    osc.start(); osc.stop(ac.currentTime+0.42);
+  } catch(e){}
+}
+
+function playFartSound() {
+  if (muted) return;
+  try {
+    const ac = new(window.AudioContext||window.webkitAudioContext)();
+    const o1 = ac.createOscillator(), g1 = ac.createGain();
+    const o2 = ac.createOscillator(), g2 = ac.createGain();
+    o1.connect(g1); o2.connect(g2);
+    g1.connect(ac.destination); g2.connect(ac.destination);
+    o1.type='sawtooth'; o2.type='square';
+    o1.frequency.setValueAtTime(130,ac.currentTime);
+    o1.frequency.exponentialRampToValueAtTime(35,ac.currentTime+0.32);
+    o2.frequency.setValueAtTime(90,ac.currentTime);
+    o2.frequency.exponentialRampToValueAtTime(20,ac.currentTime+0.32);
+    g1.gain.setValueAtTime(0.22,ac.currentTime);
+    g1.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.38);
+    g2.gain.setValueAtTime(0.14,ac.currentTime);
+    g2.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.38);
+    o1.start(); o1.stop(ac.currentTime+0.38);
+    o2.start(); o2.stop(ac.currentTime+0.38);
+  } catch(e){}
+}
+
+function playNonnaSound() {
+  try {
+    const ac=new(window.AudioContext||window.webkitAudioContext)();
+    const osc=ac.createOscillator(), gain=ac.createGain();
+    osc.connect(gain); gain.connect(ac.destination); osc.type='sine';
+    osc.frequency.setValueAtTime(440,ac.currentTime);
+    osc.frequency.setValueAtTime(550,ac.currentTime+0.1);
+    osc.frequency.setValueAtTime(440,ac.currentTime+0.2);
+    gain.gain.setValueAtTime(0.10,ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.35);
+    osc.start(); osc.stop(ac.currentTime+0.35);
+  } catch(e){}
+}
+
 // ---- Canvas scaling ----
 let canvasScale = 1;
 function resizeCanvas() {
@@ -131,7 +193,7 @@ function toGamePos(clientX, clientY) {
 }
 
 // ---- Controlli touch ----
-const JOY_CX = 95, JOY_CY = H - 78; // y=422
+const JOY_CX = 95, JOY_CY = H - 78;
 const JOY_R = 72, JOY_KNOB_R = 30;
 const FIRE_CX = W - 95, FIRE_CY = H - 78;
 const FIRE_R = 62;
@@ -214,6 +276,8 @@ function makeGuardian(leftSide) {
     pumpInterval:getPumpInterval(), duration:200+Math.random()*80,
     fleeDir:leftSide?-1:1, burst, burstActive:false, burstShotsLeft:0,
     burstDelay:0, burstParams:burst?getBurstParams():null,
+    speed: 1.2 + Math.random()*0.6,  // velocità inseguimento orizzontale
+    cleanTimer: 0,                    // durata animazione pulizia
   };
 }
 function spawnGuardian() {
@@ -222,25 +286,13 @@ function spawnGuardian() {
   guardians.push(makeGuardian(leftSide));
   playGuardianSound(); updateMusic();
 }
-function playGuardianSound() {
-  try {
-    const ac=new(window.AudioContext||window.webkitAudioContext)();
-    const osc=ac.createOscillator(), gain=ac.createGain();
-    osc.connect(gain); gain.connect(ac.destination); osc.type='square';
-    osc.frequency.setValueAtTime(880,ac.currentTime);
-    osc.frequency.setValueAtTime(660,ac.currentTime+0.12);
-    osc.frequency.setValueAtTime(880,ac.currentTime+0.24);
-    gain.gain.setValueAtTime(0.12,ac.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.42);
-    osc.start(); osc.stop(ac.currentTime+0.42);
-  } catch(e){}
-}
-function updateGuardianPump(g) {
+
+function updateGuardianPump(g, tx, ty) {
   if (g.state!=='pumping') return;
   if (g.burst) {
     if (g.burstActive) {
       if (++g.burstDelay>=g.burstParams.shotInterval) {
-        g.burstDelay=0; fireWaterJet(g.x,g.y); g.burstShotsLeft--;
+        g.burstDelay=0; fireWaterJet(g.x,g.y,tx,ty); g.burstShotsLeft--;
         if (g.burstShotsLeft<=0) { g.burstActive=false; g.pumpTimer=0; }
       }
     } else {
@@ -250,13 +302,148 @@ function updateGuardianPump(g) {
       }
     }
   } else {
-    if (++g.pumpTimer%g.pumpInterval===0) fireWaterJet(g.x,g.y);
+    if (++g.pumpTimer%g.pumpInterval===0) fireWaterJet(g.x,g.y,tx,ty);
   }
 }
-function fireWaterJet(gx,gy) {
-  for (let i=0;i<4;i++) {
-    waterDrops.push({ x:gx+(Math.random()-0.5)*10, y:gy-48,
-      vx:(Math.random()-0.5)*1.4, vy:-(12+Math.random()*4), r:4+Math.random()*2, life:1 });
+
+// tx,ty = posizione piccione (target)
+function fireWaterJet(gx, gy, tx, ty) {
+  const piAbove = (ty !== undefined) && ty < gy - 50 && Math.abs(tx - gx) < 200;
+  for (let i = 0; i < 4; i++) {
+    let vx, vy;
+    if (piAbove) {
+      // Getto diagonale verso il piccione
+      const dx = tx - gx, dy = ty - gy;
+      const dist = Math.hypot(dx, dy) || 1;
+      const spd = 11 + Math.random() * 3;
+      vx = (dx / dist) * spd * 0.45 + (Math.random()-0.5) * 1.4;
+      vy = (dy / dist) * spd        + (Math.random()-0.5) * 1.4;
+    } else {
+      // Getto verticale (comportamento originale)
+      vx = (Math.random()-0.5)*1.4;
+      vy = -(12+Math.random()*4);
+    }
+    waterDrops.push({ x:gx+(Math.random()-0.5)*10, y:gy-48, vx, vy, r:4+Math.random()*2, life:1 });
+  }
+}
+
+// ---- Nonna ----
+function spawnNonna() {
+  const nx = 120 + Math.random() * (W - 240);
+  nonna = { x:nx, y:GROUND_Y, timer:0, breadTimer:80, state:'standing' };
+  breadcrumbs = [];
+  escortActive = true;
+  escortTimer = 600; // 10 secondi
+  playNonnaSound();
+  popups.push({x:nx, y:GROUND_Y-90, text:'👵 ARRIVA LA NONNA!', life:2.5, color:'#FFD700', size:20});
+}
+
+function throwBreadcrumb(x, y) {
+  for (let i = 0; i < 3; i++) {
+    breadcrumbs.push({
+      x: x + (Math.random()-0.5)*24,
+      y: y - 28,
+      vx: (Math.random()-0.5)*2.8,
+      vy: -(4 + Math.random()*4),
+      r: 4 + Math.random()*3,
+      life: 1
+    });
+  }
+}
+
+function updateNonna() {
+  if (!nonna) return;
+  nonna.timer++;
+  if (--nonna.breadTimer <= 0) {
+    nonna.breadTimer = 55 + Math.random()*35;
+    throwBreadcrumb(nonna.x, nonna.y);
+  }
+  if (escortActive) {
+    escortTimer--;
+    if (escortTimer <= 0) {
+      escortActive = false;
+      nonna = null;
+      breadcrumbs = [];
+    }
+  }
+}
+
+function drawNonna(n) {
+  if (!n) return;
+  ctx.save(); ctx.translate(n.x, n.y);
+  const bob = Math.sin(n.timer * 0.08) * 1.8;
+
+  // Ombra
+  ctx.fillStyle='rgba(0,0,0,0.12)';
+  ctx.beginPath(); ctx.ellipse(0,2,20,5,0,0,Math.PI*2); ctx.fill();
+
+  // Gambe
+  ctx.fillStyle='#556677';
+  ctx.fillRect(-8,-8+bob,7,14); ctx.fillRect(2,-8+bob,7,14);
+  // Scarpe
+  ctx.fillStyle='#442200';
+  ctx.beginPath(); ctx.ellipse(-5,8+bob,9,5,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 5,8+bob,9,5,0,0,Math.PI*2); ctx.fill();
+
+  // Corpo (cappotto viola scuro)
+  ctx.fillStyle='#664488';
+  ctx.beginPath(); ctx.ellipse(0,-26+bob,17,22,0,0,Math.PI*2); ctx.fill();
+
+  // Braccio con borsetta (sinistra)
+  ctx.fillStyle='#664488';
+  ctx.fillRect(-24,-38+bob,8,20);
+  ctx.fillStyle='#aa7733';
+  ctx.beginPath(); ctx.roundRect(-32,-28+bob,15,16,3); ctx.fill();
+  ctx.strokeStyle='#885522'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(-24,-32+bob); ctx.lineTo(-28,-28+bob); ctx.stroke();
+
+  // Braccio che lancia molliche (destra) – si muove
+  const throwAng = -0.7 + Math.sin(n.timer*0.12)*0.5;
+  ctx.save(); ctx.translate(18,-36+bob); ctx.rotate(throwAng);
+  ctx.fillStyle='#664488'; ctx.fillRect(0,0,8,20);
+  // Mano
+  ctx.fillStyle='#f4c090'; ctx.beginPath(); ctx.arc(4,22,5,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // Testa
+  ctx.fillStyle='#f4c090';
+  ctx.beginPath(); ctx.arc(0,-52+bob,13,0,Math.PI*2); ctx.fill();
+
+  // Capelli bianchi
+  ctx.fillStyle='#eeeeee';
+  ctx.beginPath(); ctx.arc(0,-61+bob,12,Math.PI,0); ctx.fill();
+  ctx.beginPath(); ctx.arc(-8,-55+bob,7,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 8,-55+bob,7,0,Math.PI*2); ctx.fill();
+
+  // Cappello viola con fiore
+  ctx.fillStyle='#552299';
+  ctx.beginPath(); ctx.ellipse(0,-65+bob,17,6,0,0,Math.PI*2); ctx.fill();
+  ctx.fillRect(-11,-74+bob,22,11);
+  ctx.fillStyle='#ff88bb';
+  for (let i=0;i<5;i++){
+    const fa=i*Math.PI*2/5;
+    ctx.beginPath(); ctx.arc(9+Math.cos(fa)*4,-77+bob+Math.sin(fa)*4,3,0,Math.PI*2); ctx.fill();
+  }
+  ctx.fillStyle='#ffdd00'; ctx.beginPath(); ctx.arc(9,-77+bob,3,0,Math.PI*2); ctx.fill();
+
+  // Occhi e sorriso
+  ctx.fillStyle='#333';
+  ctx.beginPath(); ctx.arc(-4,-53+bob,2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 4,-53+bob,2,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#995533'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(0,-50+bob,5,0.2,Math.PI-0.2); ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawBreadcrumbs() {
+  for (const b of breadcrumbs) {
+    ctx.save(); ctx.globalAlpha=Math.min(1,b.life)*0.92;
+    ctx.fillStyle='#c8a060';
+    ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,240,180,0.6)';
+    ctx.beginPath(); ctx.arc(b.x-b.r*0.3,b.y-b.r*0.3,b.r*0.4,0,Math.PI*2); ctx.fill();
+    ctx.restore();
   }
 }
 
@@ -281,7 +468,7 @@ function spawnParticles(x,y,color) {
 }
 function shoot() {
   if (shootCooldown>0) return;
-  guanos.push({x:player.x,y:player.y+player.h/2,r:7,vy:GUANO_SPEED,splat:false,splatTimer:0});
+  guanos.push({x:player.x,y:player.y+player.h/2,r:7,vy:GUANO_SPEED,splat:false,splatTimer:0,super:false});
   shootCooldown=12;
 }
 
@@ -344,22 +531,33 @@ function drawCar(car) {
   }
   ctx.restore();
 }
+
 function drawGuardian(g) {
   if (!g) return;
   ctx.save(); ctx.translate(g.x,g.y);
-  const facingLeft=g.state==='fleeing'?g.fleeDir<0:g.x>W/2;
+  const facingLeft = g.state==='fleeing' ? g.fleeDir<0 : g.x>W/2;
   if (facingLeft) ctx.scale(-1,1);
+
+  // Ombra
   ctx.fillStyle='rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.ellipse(0,2,14,4,0,0,Math.PI*2); ctx.fill();
-  const lo=g.state==='fleeing'?Math.sin(g.timer*0.28)*6:0;
+
+  // Gambe (con oscillazione in fuga)
+  const lo = g.state==='fleeing' ? Math.sin(g.timer*0.28)*6 : 0;
   ctx.fillStyle='#1a5c1a'; ctx.fillRect(-7,-16,5,16-lo); ctx.fillRect(2,-16,5,16+lo);
+
+  // Scarpe
   ctx.fillStyle='#2c1a0e'; ctx.fillRect(-9,-2,8,4); ctx.fillRect(2,-2,8,4);
+
+  // Corpo (uniforme)
   ctx.fillStyle='#2d7a2d'; ctx.fillRect(-9,-34,18,18);
-  ctx.fillStyle='#8B6914'; ctx.fillRect(-9,-18,18,3);
-  ctx.fillStyle='#ffd700'; ctx.fillRect(-2,-19,4,5);
+  ctx.fillStyle='#8B6914'; ctx.fillRect(-9,-18,18,3); // cintura
+  ctx.fillStyle='#ffd700'; ctx.fillRect(-2,-19,4,5);  // fibbia
+
+  // Braccia
   ctx.fillStyle='#2d7a2d'; ctx.fillRect(-14,-32,5,14); ctx.fillRect(9,-32,5,12);
-  ctx.fillStyle='#8B6914'; ctx.fillRect(-13,-52,3,40);
-  ctx.fillStyle='#c4a35a'; for (let i=0;i<6;i++) ctx.fillRect(-17+i*3,-14,2,7);
-  if (g.state!=='fleeing') {
+
+  // Idrante / pompa (solo se non in pulizia o fuga)
+  if (g.state!=='fleeing' && g.state!=='cleaning') {
     const ps=(g.burst&&g.burstActive)?0.38:0.18, pa2=(g.burst&&g.burstActive)?5:3;
     const pa=Math.sin(g.pumpTimer*ps)*pa2;
     ctx.fillStyle='#445566'; ctx.fillRect(10,-36+pa,5,22);
@@ -375,15 +573,54 @@ function drawGuardian(g) {
       }
     }
   }
+
+  // Testa
   ctx.fillStyle='#f4c090'; ctx.beginPath(); ctx.arc(0,-42,9,0,Math.PI*2); ctx.fill();
+
+  // Cappello
   ctx.fillStyle='#1a5c1a'; ctx.fillRect(-11,-52,22,5); ctx.fillRect(-8,-61,16,10);
   ctx.fillStyle='#ffd700'; ctx.fillRect(-3,-59,6,5);
+
+  // Occhi e bocca
   ctx.fillStyle='#333';
   ctx.beginPath(); ctx.arc(-3,-44,1.5,0,Math.PI*2); ctx.fill();
   ctx.beginPath(); ctx.arc( 3,-44,1.5,0,Math.PI*2); ctx.fill();
   ctx.fillStyle='#555'; ctx.fillRect(-4,-39,8,2);
+
+  // ── Animazione pulizia ──
+  if (g.state === 'cleaning') {
+    const wipe = Math.sin(g.timer * 0.40) * 7;
+    // Braccio alzato che si pulisce la testa
+    ctx.fillStyle='#2d7a2d';
+    ctx.fillRect(8, -52+wipe, 5, 16);
+    ctx.fillStyle='#f4c090';
+    ctx.fillRect(10, -54+wipe, 8, 6);
+    // Macchia di guano in testa
+    ctx.fillStyle='rgba(230,230,200,0.85)';
+    ctx.beginPath(); ctx.ellipse(1,-48,9,4,0.2,0,Math.PI*2); ctx.fill();
+    // Stelline/esclamativi
+    if (Math.floor(g.cleanTimer/6)%2===0) {
+      ctx.fillStyle='#FFD700'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center';
+      ctx.fillText('★', 20,-58);
+      ctx.fillStyle='#ff4444';
+      ctx.fillText('!!', -18,-62);
+    }
+    // Fumetto "NOOO! LA DIVISA!" sopra la testa (solo nella prima metà)
+    if (g.cleanTimer > 50) {
+      ctx.save(); ctx.scale(facingLeft?-1:1, 1);
+      ctx.fillStyle='#fff'; ctx.strokeStyle='#333'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.roundRect(10,-90,110,26,6); ctx.fill(); ctx.stroke();
+      // triangolino fumetto
+      ctx.beginPath(); ctx.moveTo(20,-64); ctx.lineTo(14,-60); ctx.lineTo(28,-64); ctx.fill(); ctx.stroke();
+      ctx.fillStyle='#ff4400'; ctx.font='bold 10px Courier New'; ctx.textAlign='left';
+      ctx.fillText('NOOO! LA DIVISA!', 16,-72);
+      ctx.restore();
+    }
+  }
+
   ctx.restore();
 }
+
 function drawWaterDrops() {
   for (const w of waterDrops) {
     ctx.save(); ctx.globalAlpha=Math.min(1,w.life*6)*0.88;
@@ -411,19 +648,37 @@ function drawPigeon(p) {
   ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(p.w*0.39,-8,2,0,Math.PI*2); ctx.fill();
   ctx.fillStyle='#c0a060'; ctx.beginPath();
   ctx.moveTo(p.w*0.52,-7); ctx.lineTo(p.w*0.52+12,-5); ctx.lineTo(p.w*0.52,-3); ctx.fill();
+  // Aureola Super Diarrea
+  if (superDiarrea) {
+    const pulse = 0.5+0.5*Math.sin(Date.now()*0.02);
+    ctx.save(); ctx.globalAlpha=0.55*pulse;
+    ctx.strokeStyle='#8B4513'; ctx.lineWidth=4;
+    ctx.beginPath(); ctx.arc(0,0,32,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
   ctx.restore();
 }
 function drawGuano(g) {
+  const isSuper = !!g.super;
+  const baseColor   = isSuper ? '#7a3008' : '#f0f0e0';
+  const trailColor  = isSuper ? 'rgba(139,69,19,0.28)' : 'rgba(245,245,245,0.3)';
+  const strokeColor = isSuper ? '#5a1e04' : '#ccc';
   if (g.splat) {
-    const t=1-g.splatTimer/20; ctx.save(); ctx.globalAlpha=t; ctx.fillStyle='#f5f5f5';
+    const t=1-g.splatTimer/20; ctx.save(); ctx.globalAlpha=t;
+    ctx.fillStyle = isSuper ? '#6b2a06' : '#f5f5f5';
     ctx.beginPath(); ctx.ellipse(g.x,g.y,g.r*2.5*(2-t),g.r*(2-t),0,0,Math.PI*2); ctx.fill();
     for(let i=0;i<4;i++){ctx.beginPath();ctx.arc(g.x+Math.cos(i*1.57)*g.r*3,g.y+Math.sin(i*1.57)*g.r*2,g.r*0.6,0,Math.PI*2);ctx.fill();}
     ctx.restore(); return;
   }
-  ctx.fillStyle='rgba(245,245,245,0.3)';
+  ctx.fillStyle=trailColor;
   for(let i=1;i<=3;i++){ctx.beginPath();ctx.arc(g.x,g.y-i*10,g.r*(1-i*0.25),0,Math.PI*2);ctx.fill();}
-  ctx.fillStyle='#f0f0e0'; ctx.strokeStyle='#ccc'; ctx.lineWidth=1;
+  ctx.fillStyle=baseColor; ctx.strokeStyle=strokeColor; ctx.lineWidth=1;
   ctx.beginPath(); ctx.arc(g.x,g.y,g.r,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  if (isSuper) {
+    // Alone puzzolente
+    ctx.fillStyle='rgba(120,60,10,0.22)';
+    ctx.beginPath(); ctx.arc(g.x,g.y,g.r*1.8,0,Math.PI*2); ctx.fill();
+  }
 }
 function drawParticles() {
   for(const p of particles){ctx.save();ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);ctx.fill();ctx.restore();}
@@ -446,32 +701,21 @@ function drawArrow(x, y, angle) {
 function drawTouchControls() {
   if (intro||gameOver) return;
   ctx.save();
-
-  // --- Joystick ---
   const kx=JOY_CX+joyKnobX, ky=JOY_CY+joyKnobY;
-  // Base fill
   ctx.globalAlpha=0.14; ctx.fillStyle='#ffffff';
   ctx.beginPath(); ctx.arc(JOY_CX,JOY_CY,JOY_R,0,Math.PI*2); ctx.fill();
-  // Base ring
   ctx.globalAlpha=0.3; ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=2;
   ctx.beginPath(); ctx.arc(JOY_CX,JOY_CY,JOY_R,0,Math.PI*2); ctx.stroke();
-  // Inner ring (dead zone hint)
   ctx.globalAlpha=0.12; ctx.beginPath(); ctx.arc(JOY_CX,JOY_CY,18,0,Math.PI*2); ctx.stroke();
-  // Direction arrows
   const off=JOY_R-15;
   ctx.globalAlpha=0.42; ctx.fillStyle='#ffffff';
-  drawArrow(JOY_CX,       JOY_CY-off, 0);           // su
-  drawArrow(JOY_CX,       JOY_CY+off, Math.PI);      // giù
-  drawArrow(JOY_CX-off,   JOY_CY,    -Math.PI/2);    // sinistra
-  drawArrow(JOY_CX+off,   JOY_CY,     Math.PI/2);    // destra
-  // Knob
+  drawArrow(JOY_CX,JOY_CY-off,0); drawArrow(JOY_CX,JOY_CY+off,Math.PI);
+  drawArrow(JOY_CX-off,JOY_CY,-Math.PI/2); drawArrow(JOY_CX+off,JOY_CY,Math.PI/2);
   ctx.globalAlpha=joyTouchId!==null?0.88:0.58;
   const kg=ctx.createRadialGradient(kx-5,ky-5,2,kx,ky,JOY_KNOB_R);
   kg.addColorStop(0,'#c0d8ee'); kg.addColorStop(1,'#2a3a4a');
   ctx.fillStyle=kg; ctx.beginPath(); ctx.arc(kx,ky,JOY_KNOB_R,0,Math.PI*2); ctx.fill();
   ctx.strokeStyle='rgba(180,215,245,0.8)'; ctx.lineWidth=1.5; ctx.stroke();
-
-  // --- Pulsante SPARA ---
   const pressed=fireTouchId!==null, fr=pressed?FIRE_R+5:FIRE_R;
   ctx.globalAlpha=pressed?0.9:0.42;
   const fg=ctx.createRadialGradient(FIRE_CX-14,FIRE_CY-14,4,FIRE_CX,FIRE_CY,fr);
@@ -481,14 +725,10 @@ function drawTouchControls() {
   ctx.globalAlpha=pressed?1:0.92; ctx.fillStyle='#fff'; ctx.textAlign='center';
   ctx.font=`bold ${pressed?18:17}px Courier New`;
   ctx.fillText('SPARA',FIRE_CX,FIRE_CY+7);
-
-  // Pausa: mostra hint "tocca per continuare"
   if (paused) {
     ctx.globalAlpha=0.6; ctx.fillStyle='#ffd700';
-    ctx.font='bold 14px Courier New';
-    ctx.fillText('tocca per continuare',W/2,H-12);
+    ctx.font='bold 14px Courier New'; ctx.fillText('tocca per continuare',W/2,H-12);
   }
-
   ctx.restore();
 }
 
@@ -557,7 +797,7 @@ function update() {
   if(levelUpAnim){levelUpAnim.timer++;if(levelUpAnim.timer>levelUpAnim.maxTimer)levelUpAnim=null;}
   if(intro||paused||gameOver) return;
 
-  // Movimento player: tastiera + joystick (analogico proporzionale)
+  // Movimento player
   let dx=0, dy=0;
   if(keys['ArrowLeft'] ||keys['KeyA']) dx-=1;
   if(keys['ArrowRight']||keys['KeyD']) dx+=1;
@@ -572,6 +812,19 @@ function update() {
   if((keys['Space']||keys['KeyZ'])&&shootCooldown<=0) shoot();
   if(shootCooldown>0) shootCooldown--;
   if(player.invincibleTimer>0) player.invincibleTimer--;
+
+  // ── Super Guano Diarrea – sparo automatico ──
+  if (superDiarrea) {
+    superDiarreaTimer--;
+    screenFlashR = 0.18 + 0.10 * Math.sin(superDiarreaTimer * 0.25);
+    if (superDiarreaTimer <= 0) { superDiarrea=false; screenFlashR=0; }
+    if (++superAutoShootTimer >= 8) {
+      superAutoShootTimer = 0;
+      guanos.push({x:player.x, y:player.y+player.h/2, r:13, vy:GUANO_SPEED,
+                   splat:false, splatTimer:0, super:true});
+      playFartSound();
+    }
+  }
 
   // Macchine
   for(const car of cars){
@@ -592,32 +845,53 @@ function update() {
   for(const g of guanos){
     if(!g.splat){
       g.y+=g.vy;
-      if(!g.splat){
+
+      // Collisione guano → NONNA
+      if (!g.splat && nonna) {
+        if (g.x>nonna.x-25 && g.x<nonna.x+25 && g.y>nonna.y-80 && g.y<nonna.y+10) {
+          g.splat=true; g.splatTimer=20;
+          lives = Math.max(0, lives-2);
+          document.getElementById('lives').textContent=lives;
+          spawnParticles(nonna.x, nonna.y-30, '#ffaa00');
+          popups.push({x:nonna.x, y:nonna.y-95, text:'HAI COLPITO LA NONNA!', life:3, color:'#FF0000', size:18});
+          nonna=null; breadcrumbs=[]; escortActive=false;
+          if(lives<=0) gameOver=true;
+        }
+      }
+
+      // Collisione guano → Guardiano
+      if (!g.splat) {
         for(const gi of guardians){
-          if(gi.state!=='fleeing'&&g.x>gi.x-18&&g.x<gi.x+18&&g.y>gi.y-64&&g.y<gi.y){
-            g.splat=true;g.splatTimer=20;gi.state='fleeing';
+          if(gi.state!=='fleeing'&&gi.state!=='cleaning'
+             &&g.x>gi.x-20&&g.x<gi.x+20&&g.y>gi.y-68&&g.y<gi.y){
+            g.splat=true; g.splatTimer=20;
+            gi.state='cleaning'; gi.cleanTimer=110;
+            gi.fleeDir=(gi.x<W/2)?-1:1;
             spawnParticles(gi.x,gi.y-30,'#f0f0e0');
-            popups.push({x:gi.x,y:gi.y-72,text:'NOOO! LA DIVISA!',life:2.5,color:'#ff6b35',size:19});
-            score+=200;document.getElementById('score').textContent=score;break;
+            score+=200; document.getElementById('score').textContent=score; break;
           }
         }
       }
+
+      // Collisione guano → Macchina
       if(!g.splat){
         for(const car of cars){
           if(!car.destroyed&&g.x>car.x&&g.x<car.x+car.w&&g.y+g.r>car.y-car.h*0.5&&g.y-g.r<car.y+car.h){
             g.splat=true;g.splatTimer=20;car.hp--;car.hit=true;car.hitTimer=15;car.shake=5;
             spawnParticles(g.x,g.y,'#f0f0e0');
-            const pts=10*level;score+=pts;
+            const pts=10*level*(g.super?2:1); score+=pts;
             popups.push({x:g.x,y:car.y-30,text:'+'+pts,life:1,color:'#FFD700',size:24});
             if(!car.splats)car.splats=[];
             car.splats.push({rx:(g.x-car.x)/car.w,ry:0.3+Math.random()*0.4,rw:8+Math.random()*8,rh:5+Math.random()*5,rot:Math.random()*Math.PI});
             car.splatted=true;
             if(car.hp<=0){car.destroyed=true;spawnParticles(car.x+car.w/2,car.y,car.color);score+=50*level;
               popups.push({x:car.x+car.w/2,y:car.y-50,text:'DISTRUTTA! '+(50*level),life:1,color:'#FF6B6B',size:20});}
-            document.getElementById('score').textContent=score;break;
+            document.getElementById('score').textContent=score; break;
           }
         }
       }
+
+      // Mancato (a terra)
       if(!g.splat&&g.y>ROAD_Y+20){
         g.splat=true;g.splatTimer=20;lives--;
         document.getElementById('lives').textContent=lives;
@@ -633,11 +907,30 @@ function update() {
     if(car.shake>0)car.shake*=0.8;
   }
 
-  // Guardiani
+  // ── Guardiani – movimento orizzontale + stati ──
   for(const g of guardians){
-    g.timer++;g.pumpTimer++;
-    if(g.state==='fleeing'){g.x+=g.fleeDir*6;}
-    else{if(g.timer>38)g.state='pumping';updateGuardianPump(g);if(g.timer>g.duration)g.state='fleeing';}
+    g.timer++; g.pumpTimer++;
+
+    if (g.state==='cleaning') {
+      // Animazione pulizia → poi fuga
+      if (--g.cleanTimer <= 0) g.state='fleeing';
+
+    } else if (g.state==='fleeing') {
+      g.x += g.fleeDir * 6;
+
+    } else {
+      // Inseguimento orizzontale: piccione o scorta nonna
+      const targetX = (escortActive && nonna) ? nonna.x : player.x;
+      const ddx = targetX - g.x;
+      if (Math.abs(ddx) > 4) {
+        g.x = Math.max(40, Math.min(W-40, g.x + Math.sign(ddx) * (g.speed||1.4)));
+      }
+
+      if (g.timer > 38) g.state = 'pumping';
+      // Non attacca se in modalità scorta
+      if (!escortActive) updateGuardianPump(g, player.x, player.y);
+      if (g.timer > g.duration) g.state = 'fleeing';
+    }
   }
   const prev=guardians.length;
   guardians=guardians.filter(g=>!(g.state==='fleeing'&&(g.x<-90||g.x>W+90)));
@@ -650,7 +943,7 @@ function update() {
 
   // Acqua
   for(const w of waterDrops){
-    w.x+=w.vx;w.y+=w.vy;w.vy+=0.12;w.life-=0.007;
+    w.x+=w.vx; w.y+=w.vy; w.vy+=0.12; w.life-=0.007;
     if(player.invincibleTimer<=0){
       if(Math.hypot(w.x-player.x,w.y-player.y)<player.w*0.35+w.r){
         w.life=0;lives--;document.getElementById('lives').textContent=lives;
@@ -662,6 +955,33 @@ function update() {
     if(w.y>H||w.y<-60)w.life=0;
   }
   waterDrops=waterDrops.filter(w=>w.life>0);
+
+  // ── Molliche ──
+  for(const b of breadcrumbs){
+    b.x+=b.vx; b.y+=b.vy; b.vy+=0.06; b.life-=0.005;
+    // Raccolta dal piccione
+    if(b.life>0 && Math.hypot(b.x-player.x,b.y-player.y)<player.w*0.42+b.r){
+      b.life=0;
+      if(!superDiarrea){
+        superDiarrea=true; superDiarreaTimer=SUPER_DIARREA_DUR; superAutoShootTimer=0;
+        screenFlashR=0.4;
+        popups.push({x:player.x,y:player.y-50,text:'💩 SUPER DIARREA ATTIVATA! 💩',life:3,color:'#8B4513',size:19});
+        playFartSound();
+      }
+    }
+  }
+  breadcrumbs=breadcrumbs.filter(b=>b.life>0&&b.y<H+30);
+
+  // ── Nonna ──
+  updateNonna();
+
+  // Spawn nonna (solo se non presente e non in escort)
+  if (!nonna && !escortActive) {
+    if (--nonnaSpawnTimer <= 0) {
+      spawnNonna();
+      nonnaSpawnTimer = 700 + Math.floor(Math.random()*500);
+    }
+  }
 
   for(const p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=0.1;p.life-=p.decay;}
   particles=particles.filter(p=>p.life>0);
@@ -681,8 +1001,42 @@ function draw() {
   drawGround();
   for(const car of cars)if(!car.destroyed){drawHitEffect(car);drawCar(car);}
   for(const g of guardians)drawGuardian(g);
+  if(nonna) drawNonna(nonna);
+  drawBreadcrumbs();
   drawWaterDrops(); for(const g of guanos)drawGuano(g);
   drawPigeon(player); drawParticles(); drawPopups();
+
+  // Flash marrone Super Diarrea
+  if (screenFlashR > 0) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(0.30, screenFlashR);
+    ctx.fillStyle = '#6b2a00';
+    ctx.fillRect(0,0,W,H);
+    ctx.restore();
+  }
+
+  // HUD Super Diarrea
+  if (superDiarrea) {
+    ctx.save();
+    ctx.fillStyle='rgba(90,35,0,0.82)';
+    ctx.fillRect(W/2-155, 6, 310, 26);
+    ctx.fillStyle='#ffcc44'; ctx.font='bold 15px Courier New'; ctx.textAlign='center';
+    const sec = Math.ceil(superDiarreaTimer/60);
+    ctx.fillText('💩 SUPER DIARREA: '+sec+'s 💩', W/2, 24);
+    ctx.restore();
+  }
+
+  // HUD scorta nonna
+  if (escortActive && nonna) {
+    ctx.save();
+    ctx.fillStyle='rgba(0,0,0,0.55)';
+    ctx.fillRect(W/2-145, H-52, 290, 22);
+    ctx.fillStyle='#FFD700'; ctx.font='bold 13px Courier New'; ctx.textAlign='center';
+    const sec2 = Math.ceil(escortTimer/60);
+    ctx.fillText('👮 SCORTA NONNA – '+sec2+'s (nessun attacco)', W/2, H-36);
+    ctx.restore();
+  }
+
   drawTouchControls();
   drawLevelUp();
   if(paused){
@@ -698,6 +1052,9 @@ function reset(){
   score=0;lives=3;level=1;paused=false;gameOver=false;
   guanos=[];particles=[];popups=[];shootCooldown=0;
   waterDrops=[];guardians=[];guardianSpawnTimer=300;levelUpAnim=null;
+  nonna=null; breadcrumbs=[]; escortActive=false; escortTimer=0;
+  superDiarrea=false; superDiarreaTimer=0; superAutoShootTimer=0; screenFlashR=0;
+  nonnaSpawnTimer=900+Math.floor(Math.random()*400);
   player.x=W/2;player.y=80;player.invincibleTimer=0;
   resetJoystick();fireTouchId=null;
   document.getElementById('score').textContent=0;
